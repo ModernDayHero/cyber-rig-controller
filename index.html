@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+    <title>Rig Controller</title>
+    <link rel="icon" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  </head>
+  <body>
+    <main class="rig" id="app">
+      <header class="top">
+        <div class="brand">
+          <span class="brand-mark">◢</span>
+          <span>RIG//CTRL</span>
+        </div>
+        <span class="current" id="current">DARK</span>
+      </header>
+
+      <section class="status" id="status" aria-label="Device status"></section>
+
+      <p class="banner" id="banner" hidden></p>
+
+      <section class="modes" id="modes" aria-label="Modes"></section>
+
+      <section class="row hunt" id="hunt" aria-label="Hunt style">
+        <span class="label">HUNT</span>
+        <div class="seg" id="huntSeg"></div>
+      </section>
+
+      <section class="row bright" aria-label="Brightness">
+        <span class="label">BRIGHT</span>
+        <input type="range" id="bright" min="10" max="100" step="5" />
+        <output id="brightOut">35%</output>
+      </section>
+
+      <footer class="bottom">
+        <button class="ghost" id="standby">STANDBY</button>
+        <button class="connect" id="connect">CONNECT ALL</button>
+      </footer>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
