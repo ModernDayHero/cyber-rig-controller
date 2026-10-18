@@ -1,5 +1,5 @@
 import './style.css';
-import { SETS, BREATHE_IDX, RAINBOW_IDX, RAINBOW, POWER, hex, rgb, modeOf } from './config.js';
+import { SETS, BREATHE_IDX, RAINBOW_IDX, HACK_IDX, HACK_TIMER, RAINBOW, POWER, hex, rgb, modeOf } from './config.js';
 import { Rig } from './rig.js';
 import { decodeImage, toBolt, toHat, paintPreview, paintHat } from './image.js';
 import { EFFECTS, rgb323, fromRgb323 } from './ble/spotled.js';
@@ -87,6 +87,21 @@ function paintRainbow({ speed, width, dir }) {
   $('rbSpeedOut').textContent = `${(speed / 50).toFixed(1)}x`;
   $('rbWidthOut').textContent = `${width}%`;
   for (const b of $('rbDir').querySelectorAll('button')) b.classList.toggle('on', Number(b.dataset.dir) === dir);
+}
+
+// ---------- hack timer (how often the virus hijacks on its own) ----------
+const hackBtns = HACK_TIMER.map((p) => {
+  const b = document.createElement('button');
+  b.textContent = p.label;
+  b.addEventListener('click', () => rig.setHackTimer({ min: p.min, max: p.max }));
+  $('hackTimer').append(b);
+  return b;
+});
+function renderHackTimer(t) {
+  const i = HACK_TIMER.findIndex((p) => p.min === t.min && p.max === t.max);
+  hackBtns.forEach((b, j) => b.classList.toggle('on', j === i));
+  $('hackTimerHint').textContent = i >= 0 ? `Random hijack: ${HACK_TIMER[i].hint}`
+    : t.max ? `Random hijack: every ${t.min}–${t.max} s` : 'Random hijack: off';
 }
 
 // ---------- views: RIG / BOLT / HAT ----------
@@ -311,6 +326,8 @@ function render(s) {
 
   const showBreathe = s.set === 'alt' && s.idx.alt === BREATHE_IDX;
   $('rbpanel').hidden = !(s.set === 'alt' && s.idx.alt === RAINBOW_IDX);
+  $('hackpanel').hidden = !(s.set === 'alt' && s.idx.alt === HACK_IDX);
+  renderHackTimer(s.hackTimer);
   if (document.activeElement !== $('rbSpeed')) $('rbSpeed').value = s.rainbow.speed;
   if (document.activeElement !== $('rbWidth')) $('rbWidth').value = s.rainbow.width;
   paintRainbow(s.rainbow);

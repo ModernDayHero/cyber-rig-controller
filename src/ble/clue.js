@@ -6,6 +6,7 @@
 //   M <os|alt> <i>     current mode
 //   C r g b r g b      rebreather colors
 //   R sp w dir         rainbow speed / width / direction
+//   T min max          random-hack timer, seconds (0 0 = off)
 //   P on|waking|blink|off
 //   V 0|1              hacked (the CLUE refuses M/C while 1; K purges)
 //   L 0|1              mask Bluefruit link
@@ -98,6 +99,11 @@ export class Clue extends RigDevice {
       case 'R': {
         const [speed, width, dir] = w.map(Number);
         if (w.length === 3) report({ rainbow: { speed, width, dir } });
+        break;
+      }
+      case 'T': {
+        const [min, max] = w.map(Number);
+        if (w.length === 2) report({ hackTimer: { min, max } });
         break;
       }
       case 'P':

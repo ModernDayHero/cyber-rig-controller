@@ -6,7 +6,7 @@
 import { Clue } from './ble/clue.js';
 import { Bolt } from './ble/bolt.js';
 import { SpotLed } from './ble/spotled.js';
-import { BRIGHTNESS, BREATHE_IDX, DEFAULT_PAIR, DEFAULT_RAINBOW, POWER, SETS, cmd, look } from './config.js';
+import { BRIGHTNESS, BREATHE_IDX, DEFAULT_HACK_TIMER, DEFAULT_PAIR, DEFAULT_RAINBOW, POWER, SETS, cmd, look } from './config.js';
 
 const STORE_KEY = 'rig-state-v3';
 
@@ -39,6 +39,7 @@ export class Rig extends EventTarget {
       idx: saved.idx ?? { os: 0, alt: 0 },
       pair: saved.pair ?? DEFAULT_PAIR,
       rainbow: saved.rainbow ?? DEFAULT_RAINBOW,
+      hackTimer: saved.hackTimer ?? DEFAULT_HACK_TIMER,
       bolt: { ...DEFAULT_BOLT, ...saved.bolt, content: { ...DEFAULT_BOLT.content, ...saved.bolt?.content } },
       hat: { ...DEFAULT_HAT, ...saved.hat },
       power: POWER.ON,
@@ -82,6 +83,7 @@ export class Rig extends EventTarget {
       }
       if (r.pair) patch.pair = r.pair;
       if (r.rainbow) patch.rainbow = r.rainbow;
+      if (r.hackTimer) patch.hackTimer = r.hackTimer;
       if (r.power) patch.power = r.power;
       if ('hacked' in r) patch.hacked = r.hacked;
       this._update(patch);
@@ -91,8 +93,8 @@ export class Rig extends EventTarget {
   }
 
   _save() {
-    const { set, idx, pair, rainbow, bolt, hat } = this.state;
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ set, idx, pair, rainbow, bolt, hat })); } catch {}
+    const { set, idx, pair, rainbow, hackTimer, bolt, hat } = this.state;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ set, idx, pair, rainbow, hackTimer, bolt, hat })); } catch {}
   }
 
   /** What the rig looks like right now, for the devices that follow it. */
@@ -217,6 +219,12 @@ export class Rig extends EventTarget {
       this.clue.send(cmd.rainbow(rainbow));
       this._update({ rainbow });
     });
+  }
+
+  /** How often the virus hijacks on its own. Works while hacked too (it's a setting). */
+  setHackTimer(t) {
+    this.clue.send(cmd.hackTimer(t));
+    this._update({ hackTimer: t });
   }
 
   standby() { this.clue.send(cmd.standby()); this._update({ power: POWER.STANDBY }); }

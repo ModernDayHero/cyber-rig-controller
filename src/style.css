@@ -101,12 +101,15 @@ body.hacked .current { animation: glitch 0.5s steps(2) infinite; }
 .view > .modes { flex: 1; }
 
 .panel { display: flex; flex-direction: column; gap: 10px; transition: opacity 0.2s; }
+.panel[hidden] { display: none; }
 .panel.dim { opacity: 0.45; }
 .pane { display: flex; flex-direction: column; gap: 10px; }
 .pane[hidden], .looks[hidden] { display: none; }
 .seg.seg3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .seg.seg4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.seg.seg3 button + button, .seg.seg4 button + button { border-left: 1px solid var(--line); }
+.seg.seg5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.seg.seg5 button { font-size: 11px; letter-spacing: 0.04em; }
+.seg.seg3 button + button, .seg.seg4 button + button, .seg.seg5 button + button { border-left: 1px solid var(--line); }
 
 .looks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .looks button {
