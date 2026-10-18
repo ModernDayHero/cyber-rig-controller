@@ -18,7 +18,7 @@ export default defineConfig({
         start_url: base,
         scope: base,
         display: 'standalone',
-        orientation: 'portrait',
+        orientation: 'any',          // portrait or turned sideways (landscape layout)
         background_color: '#000000',
         theme_color: '#000000',
         icons: [

@@ -255,6 +255,39 @@ output { width: 44px; text-align: right; font-size: 13px; }
 @keyframes glitch {
   0% { transform: translate(0); } 50% { transform: translate(-2px, 1px); opacity: 0.7; }
 }
+/* ---------- landscape: phone turned sideways ----------
+   Left rail: header, links, alert, device tabs, power + connect (thumb side).
+   Right: the active view, scrolling on its own. */
+@media (orientation: landscape) and (max-height: 600px) {
+  .rig {
+    height: 100dvh; min-height: 0; max-width: none;
+    padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+             max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+    display: grid; gap: 10px 16px;
+    grid-template-columns: minmax(260px, 34%) 1fr;
+    grid-template-rows: auto auto auto auto 1fr auto;
+    grid-template-areas:
+      "top    view"
+      "status view"
+      "banner view"
+      "alert  view"
+      "views  view"
+      "bottom view";
+  }
+  .top { grid-area: top; }
+  .status { grid-area: status; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .banner { grid-area: banner; }
+  .alert { grid-area: alert; }
+  .views { grid-area: views; align-self: start; }
+  .bottom { grid-area: bottom; }
+  .view { grid-area: view; overflow-y: auto; min-height: 0; padding-right: 2px; }
+  .current { font-size: 16px; }
+  .alert-text span { display: none; }                 /* keep the alert to one line */
+  .modes { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(84px, 1fr); }
+  .view > .modes { flex: 1; }
+  .hat-pix { max-height: 32vh; width: auto; align-self: center; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
