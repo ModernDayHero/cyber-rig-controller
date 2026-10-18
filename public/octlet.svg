@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -6 310 302">
+  <!-- STEAMWorkz Octlet: gear body, eye with a gear pupil, 8 circuit-trace legs -->
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2ec4a6"/>
+      <stop offset="1" stop-color="#4f9fe0"/>
+    </linearGradient>
+    <radialGradient id="pupil" cx="0.4" cy="0.35" r="0.75">
+      <stop offset="0" stop-color="#2a56c8"/>
+      <stop offset="1" stop-color="#0b1a5c"/>
+    </radialGradient>
+  </defs>
+
+  <g fill="none" stroke="url(#body)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="18,27 58,67 112,112"/>
+    <polyline points="67,37 84,54 84,82 114,110"/>
+    <polyline points="115,12 132,29 132,58 150,76"/>
+    <polyline points="172,48 154,66 150,80"/>
+    <polyline points="27,85 60,85 102,124"/>
+    <polyline points="117,85 128,96 132,104"/>
+    <polyline points="22,127 54,127 84,152"/>
+    <polyline points="68,177 68,160 92,138"/>
+  </g>
+
+  <g fill="url(#body)">
+    <polygon points="70,140 140,70 255,150 180,245"/>
+    <circle cx="212" cy="192" r="72"/>
+    <!-- gear teeth -->
+    <g transform="translate(212 192)">
+      <rect x="-9" y="-87" width="18" height="22" rx="2"/>
+      <rect x="-9" y="-87" width="18" height="22" rx="2" transform="rotate(25.7)"/>
+      <rect x="-9" y="-87" width="18" height="22" rx="2" transform="rotate(51.4)"/>
+      <rect x="-9" y="-87" width="18" height="22" rx="2" transform="rotate(77.1)"/>
+      <rect x="-9" y="-87" width="18" height="22" rx="2" transform="rotate(102.9)"/>
+      <rect x="-9" y="-87" width="18" height="22" rx="2" transform="rotate(128.6)"/>
+      <rect x="-9" y="-87" width="18" height="22" rx="2" transform="rotate(154.3)"/>
+      <rect x="-9" y="-87" width="18" height="22" rx="2" transform="rotate(180)"/>
+      <rect x="-9" y="-87" width="18" height="22" rx="2" transform="rotate(205.7)"/>
+    </g>
+  </g>
+
+  <!-- pads: white centre, gradient ring -->
+  <g fill="#ffffff" stroke="url(#body)" stroke-width="6">
+    <circle cx="18" cy="27" r="10"/>
+    <circle cx="67" cy="37" r="10"/>
+    <circle cx="115" cy="12" r="10"/>
+    <circle cx="172" cy="48" r="10"/>
+    <circle cx="27" cy="85" r="10"/>
+    <circle cx="117" cy="85" r="10"/>
+    <circle cx="22" cy="127" r="10"/>
+    <circle cx="68" cy="177" r="10"/>
+  </g>
+
+  <!-- eye -->
+  <circle cx="196" cy="188" r="44" fill="#ffffff"/>
+  <g transform="translate(196 188)" fill="url(#pupil)">
+    <circle r="25"/>
+    <g fill="#0b1a5c">
+      <rect x="-3" y="-30" width="6" height="7"/>
+      <rect x="-3" y="-30" width="6" height="7" transform="rotate(30)"/>
+      <rect x="-3" y="-30" width="6" height="7" transform="rotate(60)"/>
+      <rect x="-3" y="-30" width="6" height="7" transform="rotate(90)"/>
+      <rect x="-3" y="-30" width="6" height="7" transform="rotate(120)"/>
+      <rect x="-3" y="-30" width="6" height="7" transform="rotate(150)"/>
+      <rect x="-3" y="-30" width="6" height="7" transform="rotate(180)"/>
+      <rect x="-3" y="-30" width="6" height="7" transform="rotate(210)"/>
+      <rect x="-3" y="-30" width="6" height="7" transform="rotate(240)"/>
+      <rect x="-3" y="-30" width="6" height="7" transform="rotate(270)"/>
+      <rect x="-3" y="-30" width="6" height="7" transform="rotate(300)"/>
+      <rect x="-3" y="-30" width="6" height="7" transform="rotate(330)"/>
+    </g>
+  </g>
+</svg>
