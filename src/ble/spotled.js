@@ -14,6 +14,7 @@
 // a drop mid-upload reconnects and retries.
 
 import { RigDevice, Status } from './device.js';
+import { lookPalette, tuneOf } from '../config.js';
 
 const SERVICE = '0000ff20-0000-1000-8000-00805f9b34fb';
 const CMD_CHAR = '0000ff21-0000-1000-8000-00805f9b34fb'; // control writes + notifications
@@ -199,7 +200,7 @@ function canvas(w, h, fill = BLACK) {
   return {
     set(x, y, c) { if (x >= 0 && x < w && y >= 0 && y < h) px[y * w + x] = c; },
     get(x, y) { return px[y * w + x]; },
-    frame() { const out = new Uint8Array(w * h); px.forEach((c, i) => { out[i] = rgb323(c); }); return { px: out }; },
+    frame() { const out = new Uint8Array(w * h); px.forEach((c, i) => { out[i] = rgbK(c); }); return { px: out }; },
     rowShift(y, dx) {                     // glitch: slide one row sideways
       const row = px.slice(y * w, y * w + w);
       for (let x = 0; x < w; x++) px[y * w + x] = row[((x - dx) % w + w) % w];
@@ -235,6 +236,9 @@ function drawText(cv, text, ox, oy, color) {
 
 const PURPLE = [160, 60, 255], MAG = [255, 43, 214], CYAN = [0, 229, 255];
 const RED = [255, 30, 30], GREEN = [34, 255, 102], WHITE = [255, 255, 255], BLACK = [0, 0, 0];
+const BASE = { PURPLE, MAG, CYAN, RED, GREEN: [20, 255, 30] };   // matrix: pure green on this panel
+let KB = 1;                                    // brightness of the look being built (tuning)
+const rgbK = (c) => rgb323(KB === 1 ? c : scale(c, KB));
 const scale = (c, k) => c.map((v) => v * k);
 const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 function wheel(h) {
@@ -245,10 +249,18 @@ function wheel(h) {
 const rnd = (seed) => () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
 
 /** -> { frames: [{px}], ms } for a rig look on a w x h hat, or null. */
+/** -> { frames, ms } for a rig look, with the mode's tuning (colours + brightness). */
 export function lookFrames(look, s, w = 32, h = 16) {
+  KB = tuneOf(s, look.key).bright / 100;
+  try { return lookFramesRaw(look, s, w, h); } finally { KB = 1; }
+}
+
+function lookFramesRaw(look, s, w, h) {
+  const { PURPLE, MAG, CYAN, RED, GREEN } = lookPalette(s, look.key, BASE);
+  const HEAD = GREEN === BASE.GREEN ? [210, 255, 210] : GREEN.map((v) => Math.min(255, (v >> 1) + 128));
   const frame = (fn) => {
     const px = new Uint8Array(w * h);
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) px[y * w + x] = rgb323(fn(x, y));
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) px[y * w + x] = rgbK(fn(x, y));
     return { px };
   };
   const r = rnd(4821);
@@ -359,8 +371,8 @@ export function lookFrames(look, s, w = 32, h = 16) {
             grid[c][gy].forEach((row, y) => [...row].forEach((p, x) => {
               if (p !== '#') return;
               const py = gy * 6 + y, d = hd - py;
-              if (d >= 0 && d < 2) cv.set(c * 4 + x, py, [210, 255, 210]);              // white-green head
-              else if (d >= 2 && d < 14) cv.set(c * 4 + x, py, scale([20, 255, 30], 1 - (d - 2) / 14));  // pure green (no teal)
+              if (d >= 0 && d < 2) cv.set(c * 4 + x, py, HEAD);                          // white-green head
+              else if (d >= 2 && d < 14) cv.set(c * 4 + x, py, scale(GREEN, 1 - (d - 2) / 14));
             }));
           }
         }
@@ -632,7 +644,8 @@ export class SpotLed extends RigDevice {
     const anim = lookFrames(s.look, s, w, h);
     if (!anim) return;
     const k = s.look.key;
-    const sig = JSON.stringify(['look', k, k === 'B' ? s.pair : 0, k === 'R' ? s.rainbow : 0, k === 'r' ? s.hat?.lightning : 0]);
+    const sig = JSON.stringify(['look', k, k === 'B' ? s.pair : 0, k === 'R' ? s.rainbow : 0, k === 'r' ? s.hat?.lightning : 0,
+      s.tunes?.[k === 'hack' ? 'H' : k] ?? 0]);
     await this.showFrames(anim.frames, { ms: anim.ms }, sig);
   }
 }

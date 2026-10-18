@@ -38,6 +38,42 @@ export const HACK_TIMER = [
 ];
 export const DEFAULT_HACK_TIMER = { min: 180, max: 300 };
 
+// Per-mode tuning: brightness % and main / accent colours, for the whole rig (mask via
+// the CLUE, hat, BOLT). Only modes the user changes are stored and sent; everything else
+// uses these defaults. Dark starts dimmer, like the CLUE's own default.
+export const TUNE = {
+  D: { bright: 60,  colors: ['#A03CFF'],            labels: ['COLOR'] },
+  X: { bright: 100, colors: ['#FF2BD6', '#00E5FF'], labels: ['MAIN', 'FLASH'] },
+  r: { bright: 100, colors: ['#A03CFF', '#00E5FF'], labels: ['DROPS A', 'DROPS B'] },
+  M: { bright: 100, colors: ['#22FF66'],            labels: ['RAIN'] },
+  A: { bright: 100, colors: [],                     labels: [] },
+  R: { bright: 100, colors: [],                     labels: [] },
+  B: { bright: 100, colors: [],                     labels: [] },
+  H: { bright: 100, colors: ['#FF1E1E', '#FF2BD6'], labels: ['VIRUS', 'STABS'] },
+};
+const tuneKey = (k) => (k === 'hack' || k === 'F' ? 'H' : k);
+
+/** Effective tuning for a look key: { bright 10-100, colors [[r,g,b]...], tuned }. */
+export function tuneOf(s, key) {
+  const k = tuneKey(key), d = TUNE[k] || { bright: 100, colors: [] }, t = s.tunes?.[k];
+  return { bright: t?.bright ?? d.bright, colors: (t?.colors ?? d.colors).map(rgb), tuned: !!t };
+}
+
+/** The look generators' named colours, with this mode's tuned colours swapped in. */
+export function lookPalette(s, key, base) {
+  const k = tuneKey(key), { colors: [a, b], tuned } = tuneOf(s, k);
+  if (!tuned) return base;
+  const mid = a && b ? a.map((v, i) => Math.round((v + b[i]) / 2)) : base.MAG;
+  switch (k) {
+    case 'D': return { ...base, PURPLE: a };
+    case 'X': return { ...base, MAG: a, CYAN: b };
+    case 'r': return { ...base, PURPLE: a, CYAN: b, MAG: mid };   // third drop = blend
+    case 'M': return { ...base, GREEN: a };
+    case 'H': return { ...base, RED: a, MAG: b };
+    default: return base;
+  }
+}
+
 // Default rebreather pair (CLUE boots with this too).
 export const DEFAULT_PAIR = [[160, 60, 255], [0, 229, 255]];
 
@@ -61,6 +97,10 @@ export const cmd = {
   colors: ([a, b]) => `C ${[...a, ...b].join(' ')}`,
   rainbow: ({ speed, width, dir }) => `R ${speed} ${width} ${dir}`,
   hackTimer: ({ min, max }) => `T ${min} ${max}`,
+  tune: (key, { bright, colors }) => {
+    const [a = [0, 0, 0], b = a] = colors;
+    return `S ${key} ${bright} ${[...a, ...b].join(' ')}`;
+  },
   standby: () => 'P standby',
   off: () => 'P off',
   wake: () => 'P wake',

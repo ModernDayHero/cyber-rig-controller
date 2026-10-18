@@ -6,7 +6,7 @@
 import { Clue } from './ble/clue.js';
 import { Bolt } from './ble/bolt.js';
 import { SpotLed } from './ble/spotled.js';
-import { BRIGHTNESS, BREATHE_IDX, DEFAULT_HACK_TIMER, DEFAULT_PAIR, DEFAULT_RAINBOW, POWER, SETS, cmd, look } from './config.js';
+import { BRIGHTNESS, BREATHE_IDX, DEFAULT_HACK_TIMER, DEFAULT_PAIR, DEFAULT_RAINBOW, POWER, SETS, TUNE, cmd, look, tuneOf } from './config.js';
 
 const STORE_KEY = 'rig-state-v3';
 
@@ -40,6 +40,7 @@ export class Rig extends EventTarget {
       pair: saved.pair ?? DEFAULT_PAIR,
       rainbow: saved.rainbow ?? DEFAULT_RAINBOW,
       hackTimer: saved.hackTimer ?? DEFAULT_HACK_TIMER,
+      tunes: saved.tunes ?? {},          // only modes the user changed: key -> {bright, colors}
       bolt: { ...DEFAULT_BOLT, ...saved.bolt, content: { ...DEFAULT_BOLT.content, ...saved.bolt?.content } },
       hat: { ...DEFAULT_HAT, ...saved.hat },
       power: POWER.ON,
@@ -52,7 +53,10 @@ export class Rig extends EventTarget {
     this.clue = new Clue();
     this.devices = [this.clue, this.cap, this.bolt]; // also the Connect-all order
 
-    this.clue.addEventListener('ready', () => this.clue.applyState());
+    this.clue.addEventListener('ready', async () => {
+      await this.clue.applyState();
+      for (const k of Object.keys(this.state.tunes)) this.clue.send(this._tuneCmd(k));  // CLUE -> mask
+    });
     this.cap.addEventListener('ready', async () => {
       const h = this.state.hat;
       await this.cap.setBrightness(h.brightness);
@@ -93,14 +97,14 @@ export class Rig extends EventTarget {
   }
 
   _save() {
-    const { set, idx, pair, rainbow, hackTimer, bolt, hat } = this.state;
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ set, idx, pair, rainbow, hackTimer, bolt, hat })); } catch {}
+    const { set, idx, pair, rainbow, hackTimer, tunes, bolt, hat } = this.state;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ set, idx, pair, rainbow, hackTimer, tunes, bolt, hat })); } catch {}
   }
 
   /** What the rig looks like right now, for the devices that follow it. */
   _rigSig() {
-    const { pair, rainbow } = this.state;
-    return JSON.stringify([look(this.state), pair, rainbow]);
+    const { pair, rainbow, tunes } = this.state;
+    return JSON.stringify([look(this.state), pair, rainbow, tunes]);
   }
 
   _update(patch) {
@@ -219,6 +223,32 @@ export class Rig extends EventTarget {
       this.clue.send(cmd.rainbow(rainbow));
       this._update({ rainbow });
     });
+  }
+
+  _tuneCmd(key) {
+    const t = tuneOf(this.state, key);
+    return cmd.tune(key, { bright: t.bright, colors: t.colors });
+  }
+
+  /** Brightness / colours for one mode, on every device. Debounced for slider drags. */
+  setTune(key, patch) {
+    const cur = this.state.tunes[key] ?? { bright: TUNE[key].bright, colors: [...TUNE[key].colors] };
+    const next = { ...cur, ...patch };
+    this.state.tunes = { ...this.state.tunes, [key]: next };
+    this._save();
+    this.dispatchEvent(new CustomEvent('change', { detail: this.state }));
+    this._debounce('tune' + key, 200, () => {
+      this.clue.send(this._tuneCmd(key));
+      this._update({});                    // hat / BOLT re-render if this mode is showing
+    });
+  }
+
+  resetTune(key) {
+    const tunes = { ...this.state.tunes };
+    delete tunes[key];
+    this.state.tunes = tunes;
+    this.clue.send(this._tuneCmd(key));   // send the defaults so the CLUE / mask follow
+    this._update({});
   }
 
   /** How often the virus hijacks on its own. Works while hacked too (it's a setting). */

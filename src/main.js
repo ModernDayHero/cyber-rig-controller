@@ -1,5 +1,5 @@
 import './style.css';
-import { SETS, BREATHE_IDX, RAINBOW_IDX, HACK_IDX, HACK_TIMER, RAINBOW, POWER, hex, rgb, modeOf } from './config.js';
+import { SETS, BREATHE_IDX, RAINBOW_IDX, HACK_IDX, HACK_TIMER, RAINBOW, POWER, TUNE, hex, rgb, modeOf, tuneOf } from './config.js';
 import { Rig } from './rig.js';
 import { decodeImage, toBolt, toHat, paintPreview, paintHat } from './image.js';
 import { EFFECTS, rgb323, fromRgb323 } from './ble/spotled.js';
@@ -87,6 +87,44 @@ function paintRainbow({ speed, width, dir }) {
   $('rbSpeedOut').textContent = `${(speed / 50).toFixed(1)}x`;
   $('rbWidthOut').textContent = `${width}%`;
   for (const b of $('rbDir').querySelectorAll('button')) b.classList.toggle('on', Number(b.dataset.dir) === dir);
+}
+
+// ---------- tune: brightness + colours for the selected mode ----------
+let tuneKey = null;
+$('tuneBright').addEventListener('input', () => {
+  $('tuneBrightOut').textContent = `${$('tuneBright').value}%`;
+  if (tuneKey) rig.setTune(tuneKey, { bright: Number($('tuneBright').value) });
+});
+$('tuneReset').addEventListener('click', () => tuneKey && rig.resetTune(tuneKey));
+function renderTune(s) {
+  const m = modeOf(s), key = m.key, t = tuneOf(s, key), d = TUNE[key];
+  $('tunepanel').hidden = !d || s.power !== POWER.ON;
+  if (!d) return;
+  $('tuneName').textContent = m.name.toUpperCase();
+  if (document.activeElement !== $('tuneBright')) $('tuneBright').value = t.bright;
+  $('tuneBrightOut').textContent = `${t.bright}%`;
+  $('tuneReset').disabled = !s.tunes[key];
+  if (tuneKey !== key) {                    // rebuild the colour swatches for this mode
+    tuneKey = key;
+    $('tuneColors').replaceChildren(...d.labels.map((label, i) => {
+      const wrap = document.createElement('label');
+      wrap.className = 'swatch';
+      const inp = document.createElement('input');
+      inp.type = 'color';
+      inp.addEventListener('input', () => {
+        const colors = tuneOf(rig.state, key).colors.map(hex);
+        colors[i] = inp.value;
+        rig.setTune(key, { colors });
+      });
+      const span = document.createElement('span');
+      span.textContent = label;
+      wrap.append(inp, span);
+      return wrap;
+    }));
+  }
+  [...$('tuneColors').querySelectorAll('input')].forEach((inp, i) => {
+    if (document.activeElement !== inp) inp.value = hex(t.colors[i]);
+  });
 }
 
 // ---------- hack timer (how often the virus hijacks on its own) ----------
@@ -313,7 +351,8 @@ const POWER_LABEL = { [POWER.WAKING]: 'BOOTING', [POWER.STANDBY]: 'STANDBY', [PO
 
 function render(s) {
   const m = modeOf(s);
-  const accent = s.hacked ? '#FF1E1E' : m.breathe ? hex(s.pair[0]) : m.color;
+  const tc = tuneOf(s, m.key).colors[0];
+  const accent = s.hacked ? '#FF1E1E' : m.breathe ? hex(s.pair[0]) : tc ? hex(tc) : m.color;
   document.documentElement.style.setProperty('--accent', accent);
   document.body.classList.toggle('hacked', s.hacked);
   document.body.classList.toggle('asleep', asleep(s.power));
@@ -323,11 +362,17 @@ function render(s) {
   for (const [k, el] of Object.entries(tabEls)) el.classList.toggle('on', k === s.set);
   buildTiles(s.set);
   tileEls.forEach((el, i) => el.classList.toggle('active', i === s.idx[s.set] && s.power === POWER.ON));
+  tileEls.forEach((el, i) => {                // tiles show the tuned colours
+    const m = SETS[s.set].modes[i], t = tuneOf(s, m.key);
+    if (t.colors[0]) el.style.setProperty('--c', hex(t.colors[0]));
+    if (t.colors[1]) el.style.setProperty('--c2', hex(t.colors[1]));
+  });
 
   const showBreathe = s.set === 'alt' && s.idx.alt === BREATHE_IDX;
   $('rbpanel').hidden = !(s.set === 'alt' && s.idx.alt === RAINBOW_IDX);
   $('hackpanel').hidden = !(s.set === 'alt' && s.idx.alt === HACK_IDX);
   renderHackTimer(s.hackTimer);
+  renderTune(s);
   if (document.activeElement !== $('rbSpeed')) $('rbSpeed').value = s.rainbow.speed;
   if (document.activeElement !== $('rbWidth')) $('rbWidth').value = s.rainbow.width;
   paintRainbow(s.rainbow);

@@ -43,6 +43,16 @@
 
         <section class="modes" id="modes" aria-label="Modes"></section>
 
+        <section class="panel tune" id="tunepanel" hidden aria-label="Tune this mode">
+          <div class="row">
+            <span class="label" id="tuneName">TUNE</span>
+            <input type="range" id="tuneBright" min="10" max="100" step="5" />
+            <output id="tuneBrightOut">100%</output>
+          </div>
+          <div class="tunecolors" id="tuneColors"></div>
+          <button class="ghost reset" id="tuneReset">RESET TO DEFAULT</button>
+        </section>
+
         <section class="breathe" id="breathe" hidden aria-label="Rebreather colors">
           <div class="preview" id="preview"></div>
           <label class="swatch">

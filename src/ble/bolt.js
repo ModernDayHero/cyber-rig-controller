@@ -6,6 +6,7 @@
 // by the BOLT itself, so nothing streams while it plays.
 
 import { RigDevice } from './device.js';
+import { lookPalette, tuneOf } from '../config.js';
 
 const API_SERVICE = '00010001-574f-4f20-5370-6865726f2121';
 const API_CHAR = '00010002-574f-4f20-5370-6865726f2121';
@@ -77,6 +78,7 @@ const rnd = (seed) => () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) /
 
 const PURPLE = [160, 60, 255], MAG = [255, 43, 214], CYAN = [0, 229, 255];
 const RED = [255, 30, 30], GREEN = [34, 255, 102], GREEN_HEAD = [200, 255, 216], WHITE = [255, 255, 255];
+const BASE = { PURPLE, MAG, CYAN, RED, GREEN };
 const dim = (c, k) => c.map((v) => Math.round(v * k));
 
 function wheel(h) {
@@ -87,6 +89,8 @@ function wheel(h) {
 
 /** {palette: [[r,g,b]...] (<=16), frames: [8x8 grids], fps, fade} for a rig look. */
 export function lookAnimation(look, s) {
+  const { PURPLE, MAG, CYAN, RED, GREEN } = lookPalette(s, look.key, BASE);   // tuned colours
+  const GREEN_HEAD_T = GREEN === BASE.GREEN ? GREEN_HEAD : GREEN.map((v) => Math.min(255, (v >> 1) + 128));
   const r = rnd(4821);
   switch (look.key) {
     case 'D': // purple breathing: two frames, faded
@@ -121,7 +125,7 @@ export function lookAnimation(look, s) {
     }
 
     case 'M': { // matrix: green rain with pale heads and fading trails
-      const pal = [[0, 0, 0], GREEN_HEAD, GREEN, dim(GREEN, 0.4), dim(GREEN, 0.12)];
+      const pal = [[0, 0, 0], GREEN_HEAD_T, GREEN, dim(GREEN, 0.4), dim(GREEN, 0.12)];
       const starts = Array.from({ length: 8 }, () => Math.floor(r() * 8));
       const frames = [];
       for (let f = 0; f < 8; f++) {
@@ -321,13 +325,14 @@ export class Bolt extends RigDevice {
 
   async applyState(s) {
     const anim = s.look.on ? lookAnimation(s.look, s) : null;
-    const sig = JSON.stringify([s.look.key, anim && anim.palette, anim && anim.fps, s.brightness]);
+    const bright = Math.round(s.brightness * tuneOf(s, s.look.key).bright / 100);   // device x mode
+    const sig = JSON.stringify([s.look.key, anim && anim.palette, anim && anim.fps, bright]);
     if (sig === this._shown) return;
     this._shown = sig;
     if (!anim) {
       await this._io(CID.deleteAll);
       return this.setMatrixColor([0, 0, 0]);
     }
-    await this.playAnimation(anim, s.brightness);
+    await this.playAnimation(anim, bright);
   }
 }
