@@ -175,7 +175,7 @@ const OCTLET = {
   ],
 };
 
-// 3x5 font: letters for the virus text, hex digits 0-F for the digital rain.
+// 3x5 font: letters for the virus text, digits; the digital rain uses binary 1 / 0.
 const FONT = {
   0: ['###', '#.#', '#.#', '#.#', '###'], 1: ['.#.', '##.', '.#.', '.#.', '###'],
   2: ['###', '..#', '###', '#..', '###'], 3: ['###', '..#', '.##', '..#', '###'],
@@ -191,7 +191,7 @@ const FONT = {
   U: ['#.#', '#.#', '#.#', '#.#', '###'], V: ['#.#', '#.#', '#.#', '#.#', '.#.'],
   X: ['#.#', '#.#', '.#.', '#.#', '#.#'], '.': ['...', '...', '...', '...', '.#.'],
 };
-const RAIN_GLYPHS = [...'0123456789ABCDEF'].map((c) => FONT[c]);
+const RAIN_GLYPHS = [FONT[0], FONT[1]];
 
 /** An RGB frame buffer the looks draw into; .frame() packs it to RGB323. */
 function canvas(w, h, fill = BLACK) {
