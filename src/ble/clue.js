@@ -1,11 +1,15 @@
-// Adafruit CLUE over Nordic UART Service. In the Pro tier the CLUE is the
-// phone's link to the mask: it relays every line to both Bluefruits.
+// Adafruit CLUE over Nordic UART Service. The CLUE owns the mask: it stays the
+// BLE central for the Bluefruit(s) and is a peripheral to this page at the same time.
 //
-// Phone -> CLUE: lines from config.js `cmd` (M, B, H, S, T, P), newline-terminated.
-// CLUE -> phone (notify), PROPOSED — firmware must match:
-//   M<n>         mode picked on the watch
-//   L0 / L1      left Bluefruit link down / up
-//   R0 / R1      right Bluefruit link down / up
+// Phone -> CLUE: lines from config.js `cmd`, newline-terminated.
+// CLUE -> phone (notify), sent whenever something changes on the watch or the rig:
+//   M <os|alt> <i>     current mode
+//   C r g b r g b      rebreather colors
+//   R sp w dir         rainbow speed / width / direction
+//   P on|waking|blink|off
+//   V 0|1              hacked (the CLUE refuses M/C while 1; K purges)
+//   L 0|1              mask Bluefruit link
+//   E <why>            a command was refused (locked, asleep, bad)
 
 import { RigDevice } from './device.js';
 import { cmd } from '../config.js';
@@ -14,8 +18,7 @@ export const NUS_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
 const NUS_RX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // we write here
 const NUS_TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // CLUE notifies here
 
-// CLUE firmware should advertise with this name prefix (set in code.py).
-export const CLUE_NAME_PREFIX = 'RIG-CLUE';
+export const CLUE_NAME_PREFIX = 'RIG-CLUE'; // ble.name in rig.py
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -32,7 +35,7 @@ export class Clue extends RigDevice {
     this.tx = null;
     this._queue = Promise.resolve();
     this._buf = '';
-    this.mask = { L: false, R: false };
+    this.mask = false;
   }
 
   async setup(server) {
@@ -45,8 +48,7 @@ export class Clue extends RigDevice {
 
   teardown() {
     this.rx = this.tx = null;
-    this._setMask('L', false);
-    this._setMask('R', false);
+    this._setMask(false);
   }
 
   /** Queue one line. GATT allows one operation at a time, so writes are serialised. */
@@ -66,10 +68,9 @@ export class Clue extends RigDevice {
     return this._queue;
   }
 
-  async applyState(s) {
-    await this.send(cmd.brightness(s.brightness));
-    await this.send(cmd.hunt(s.hunt));
-    await this.send(s.mode === 1 ? cmd.modeWithSeed(s.mode, s.seed) : cmd.mode(s.mode));
+  /** The CLUE is the source of truth: on (re)connect, just ask it for everything. */
+  async applyState() {
+    await this.send(cmd.query());
   }
 
   _onData(view) {
@@ -83,18 +84,39 @@ export class Clue extends RigDevice {
   }
 
   _handleLine(line) {
-    const m = /^([MLR])(\d+)$/.exec(line);
-    if (!m) return;
-    const [, k, v] = m;
-    if (k === 'M') {
-      this.dispatchEvent(new CustomEvent('watchmode', { detail: Number(v) }));
-    } else {
-      this._setMask(k, v === '1');
+    const [k, ...w] = line.split(/\s+/);
+    const report = (patch) => this.dispatchEvent(new CustomEvent('report', { detail: patch }));
+    switch (k) {
+      case 'M':
+        if (w[0] === 'os' || w[0] === 'alt') report({ set: w[0], i: Number(w[1]) });
+        break;
+      case 'C': {
+        const v = w.map(Number);
+        if (v.length === 6) report({ pair: [v.slice(0, 3), v.slice(3)] });
+        break;
+      }
+      case 'R': {
+        const [speed, width, dir] = w.map(Number);
+        if (w.length === 3) report({ rainbow: { speed, width, dir } });
+        break;
+      }
+      case 'P':
+        report({ power: w[0] });
+        break;
+      case 'V':
+        report({ hacked: w[0] === '1' });
+        break;
+      case 'L':
+        this._setMask(w[0] === '1');
+        break;
+      case 'E':
+        this.dispatchEvent(new CustomEvent('refused', { detail: w.join(' ') }));
+        break;
     }
   }
 
-  _setMask(side, up) {
-    this.mask[side] = up;
-    this.dispatchEvent(new CustomEvent('mask', { detail: { ...this.mask } }));
+  _setMask(up) {
+    this.mask = up;
+    this.dispatchEvent(new CustomEvent('mask', { detail: up }));
   }
 }

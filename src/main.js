@@ -1,63 +1,340 @@
 import './style.css';
-import { MODES, HUNT_STYLES, POWER } from './config.js';
+import { SETS, BREATHE_IDX, RAINBOW_IDX, RAINBOW, POWER, hex, rgb, modeOf } from './config.js';
 import { Rig } from './rig.js';
+import { decodeImage, toBolt, toHat, paintPreview, paintHat } from './image.js';
+import { EFFECTS, rgb323, fromRgb323 } from './ble/spotled.js';
 import { Status } from './ble/device.js';
 
 const $ = (id) => document.getElementById(id);
 const rig = new Rig();
 
-// ---------- mode buttons ----------
-const modeEls = MODES.map((m) => {
+// ---------- set tabs + mode tiles ----------
+const tabEls = {};
+for (const [key, set] of Object.entries(SETS)) {
   const b = document.createElement('button');
-  b.className = 'mode' + (m.rainbow ? ' rainbow' : '') + (m.id === 1 ? ' glitch' : '') + (m.id === 5 ? ' peace' : '');
-  b.style.setProperty('--c', m.color);
-  b.innerHTML = `<span class="num">M${m.id}</span><span class="name">${m.name}</span><span class="bar"></span>`;
-  b.addEventListener('click', () => rig.setMode(m.id));
-  $('modes').append(b);
-  return b;
-});
+  b.textContent = set.label;
+  b.addEventListener('click', () => {
+    if (!rig.setSet(key)) flashLocked();
+  });
+  $('tabs').append(b);
+  tabEls[key] = b;
+}
 
-// ---------- hunt toggle ----------
-const huntEls = HUNT_STYLES.map((h) => {
+let tileEls = [];
+let tilesFor = null;
+function buildTiles(setKey) {
+  if (tilesFor === setKey) return;
+  tilesFor = setKey;
+  $('modes').replaceChildren();
+  tileEls = SETS[setKey].modes.map((m, i) => {
+    const b = document.createElement('button');
+    b.className = 'mode' + (m.rainbow ? ' rainbow' : '') + (m.alt ? ' duo' : '') + (m.breathe ? ' breathe-tile' : '');
+    b.style.setProperty('--c', m.color);
+    if (m.alt) b.style.setProperty('--c2', m.alt);
+    b.innerHTML = `<span class="num">${m.key}</span><span class="name">${m.name}</span>` +
+      `<span class="hint">${m.hint}</span><span class="bar"></span>`;
+    b.addEventListener('click', () => {
+      if (!rig.setMode(setKey, i)) flashLocked();
+    });
+    $('modes').append(b);
+    return b;
+  });
+}
+
+// ---------- rebreather colors ----------
+let pairTimer = null;
+function pairFromInputs() {
+  return [rgb($('c1').value), rgb($('c2').value)];
+}
+function sendPairSoon() {
+  const pair = pairFromInputs();
+  paintPair(pair);
+  clearTimeout(pairTimer);
+  pairTimer = setTimeout(() => { if (!rig.setPair(pair)) flashLocked(); }, 200);
+}
+$('c1').addEventListener('input', sendPairSoon);
+$('c2').addEventListener('input', sendPairSoon);
+$('swap').addEventListener('click', () => {
+  [$('c1').value, $('c2').value] = [$('c2').value, $('c1').value];
+  sendPairSoon();
+});
+function paintPair([a, b]) {
+  const root = document.documentElement.style;
+  root.setProperty('--p1', hex(a));
+  root.setProperty('--p2', hex(b));
+}
+
+// ---------- rainbow settings ----------
+for (const [k, el] of [['speed', $('rbSpeed')], ['width', $('rbWidth')]]) {
+  Object.assign(el, { min: RAINBOW[k].min, max: RAINBOW[k].max, step: RAINBOW[k].step });
+  el.addEventListener('input', () => {
+    rig.setRainbow({ [k]: Number(el.value) });
+    paintRainbow(rig.state.rainbow);
+  });
+}
+for (const b of $('rbDir').querySelectorAll('button')) {
+  b.addEventListener('click', () => {
+    rig.setRainbow({ dir: Number(b.dataset.dir) });
+    paintRainbow(rig.state.rainbow);
+  });
+}
+function paintRainbow({ speed, width, dir }) {
+  // One trip round the colour wheel takes ~16.7 s at 1x on the mask (0.06 rev/s).
+  const p = $('rbpreview').style;
+  p.setProperty('--rb-time', `${(16.7 * 50 / speed).toFixed(2)}s`);
+  p.setProperty('--rb-size', `${Math.round(10000 / width)}%`);
+  p.setProperty('--rb-dir', dir ? 'normal' : 'reverse');
+  $('rbSpeedOut').textContent = `${(speed / 50).toFixed(1)}x`;
+  $('rbWidthOut').textContent = `${width}%`;
+  for (const b of $('rbDir').querySelectorAll('button')) b.classList.toggle('on', Number(b.dataset.dir) === dir);
+}
+
+// ---------- views: RIG / BOLT / HAT ----------
+const VIEW_KEY = 'rig-view';
+let view = localStorage.getItem(VIEW_KEY) || 'rig';
+function showView(v) {
+  view = v;
+  try { localStorage.setItem(VIEW_KEY, v); } catch {}
+  for (const b of $('views').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === v);
+  for (const k of ['rig', 'bolt', 'hat']) $(`view-${k}`).hidden = k !== v;
+}
+for (const b of $('views').querySelectorAll('button')) b.addEventListener('click', () => showView(b.dataset.view));
+showView(view);
+
+// ---------- BOLT tab ----------
+const BOLT_LOOKS = [
+  ['D', 'Dark'], ['X', 'Glitch'], ['r', 'Rainfall'], ['M', 'Matrix'],
+  ['A', 'VU'], ['R', 'Rainbow'], ['B', 'Rebreather'], ['hack', 'Hack'],
+];
+const boltLookEls = BOLT_LOOKS.map(([key, name]) => {
   const b = document.createElement('button');
-  b.textContent = h.name;
-  b.addEventListener('click', () => rig.setHunt(h.id));
-  $('huntSeg').append(b);
-  return b;
+  b.textContent = name;
+  b.addEventListener('click', () => rig.setBolt({ follow: false, content: { type: 'look', key } }, { now: true }));
+  $('boltLooks').append(b);
+  return [key, b];
+});
+const segPick = (id, attr, fn) => {
+  for (const b of $(id).querySelectorAll('button')) b.addEventListener('click', () => fn(b.dataset[attr]));
+};
+const segShow = (id, attr, val) => {
+  for (const b of $(id).querySelectorAll('button')) b.classList.toggle('on', b.dataset[attr] === String(val));
+};
+segPick('boltFollow', 'follow', (v) => rig.setBolt({ follow: v === '1' }, { now: true }));
+segPick('boltShake', 'shake', (v) => rig.setBolt({ shake: v === '1' }, { now: true }));
+let boltPane = rig.state.bolt.content.type;
+segPick('boltType', 'type', (t) => { boltPane = t; render(rig.state); });
+
+$('boltColor').addEventListener('input', () =>
+  rig.setBolt({ follow: false, content: { type: 'color', rgb: rgb($('boltColor').value) } }));
+$('boltTextSpeed').addEventListener('input', () => { $('boltTextSpeedOut').textContent = $('boltTextSpeed').value; });
+$('boltTextSend').addEventListener('click', () => rig.setBolt({
+  follow: false,
+  content: { type: 'text', text: $('boltText').value || ' ', rgb: rgb($('boltTextColor').value), speed: Number($('boltTextSpeed').value) },
+}, { now: true }));
+$('boltSense').addEventListener('input', () => rig.setBolt({ sensitivity: Number($('boltSense').value) }));
+$('boltBright').addEventListener('input', () => rig.setBolt({ brightness: Number($('boltBright').value) }));
+
+// Image -> 8x8, up to 16 colours. Re-converted when the fit mode changes.
+let boltFrames = null, boltAnim = null, boltFit = 'contain';
+async function convertBolt() {
+  if (!boltFrames) return;
+  boltAnim = toBolt(boltFrames, boltFit);
+  paintPreview($('boltPreview'), boltAnim.frames[0], (i) => boltAnim.palette[i]);
+  $('boltImgInfo').textContent = `${boltAnim.frames.length} frame${boltAnim.frames.length > 1 ? 's' : ''}, ` +
+    `${boltAnim.palette.length} colours, ${boltAnim.fps} fps`;
+  $('boltImgSend').disabled = false;
+  // Animate the preview the way the BOLT will.
+  clearInterval(convertBolt.t);
+  if (boltAnim.frames.length > 1) {
+    let f = 0;
+    convertBolt.t = setInterval(() => {
+      f = (f + 1) % boltAnim.frames.length;
+      paintPreview($('boltPreview'), boltAnim.frames[f], (i) => boltAnim.palette[i]);
+    }, 1000 / boltAnim.fps);
+  }
+}
+$('boltFile').addEventListener('change', async () => {
+  const file = $('boltFile').files[0];
+  if (!file) return;
+  try {
+    boltFrames = await decodeImage(file, 16);
+    await convertBolt();
+  } catch (err) {
+    showBanner(`Couldn't read that image: ${err.message}`);
+  }
+});
+segPick('boltFit', 'fit', (f) => { boltFit = f; segShow('boltFit', 'fit', f); convertBolt(); });
+segShow('boltFit', 'fit', boltFit);
+$('boltImgSend').addEventListener('click', () => boltAnim && rig.setBoltImage(boltAnim));
+
+function renderBolt(b) {
+  segShow('boltFollow', 'follow', b.follow ? 1 : 0);
+  segShow('boltShake', 'shake', b.shake ? 1 : 0);
+  segShow('boltType', 'type', boltPane);
+  $('boltOwn').classList.toggle('dim', b.follow);
+  $('boltLooks').hidden = boltPane !== 'look';
+  for (const p of $('boltOwn').querySelectorAll('.pane')) p.hidden = p.dataset.pane !== boltPane;
+  for (const [key, el] of boltLookEls) {
+    el.classList.toggle('on', !b.follow && b.content.type === 'look' && b.content.key === key);
+  }
+  const c = b.content;
+  if (document.activeElement !== $('boltColor')) $('boltColor').value = hex(c.rgb);
+  if (document.activeElement !== $('boltTextColor')) $('boltTextColor').value = hex(c.rgb);
+  if (!$('boltText').value) $('boltText').value = c.text;
+  $('boltTextSpeed').value = c.speed;
+  $('boltTextSpeedOut').textContent = c.speed;
+  $('boltSense').value = b.sensitivity;
+  $('boltSenseOut').textContent = b.sensitivity;
+  $('boltBright').value = b.brightness;
+  $('boltBrightOut').textContent = `${b.brightness}%`;
+}
+
+// ---------- HAT tab ----------
+EFFECTS.forEach((name, i) => $('hatEffect').append(new Option(name.toUpperCase(), i)));
+segPick('hatFollow', 'follow', (v) => rig.setHat({ follow: v === '1' }, { now: true }));
+segPick('hatScreen', 'screen', (v) => rig.setHat({ screen: Number(v) }));
+segPick('hatLightning', 'lightning', (v) => rig.setHat({ lightning: Number(v) }));
+$('hatBright').addEventListener('input', () => rig.setHat({ brightness: Number($('hatBright').value) }));
+$('hatEffect').addEventListener('change', () => rig.setHat({ effect: Number($('hatEffect').value) }));
+$('hatMs').addEventListener('input', () => {
+  $('hatMsOut').textContent = `${$('hatMs').value}ms`;
+  rig.setHat({ ms: Number($('hatMs').value) });
 });
 
-// ---------- brightness ----------
-const bright = $('bright');
-bright.addEventListener('input', () => {
-  $('brightOut').textContent = `${bright.value}%`;
-  rig.setBrightness(Number(bright.value));
+let hatSrc = null, hatFrames = null, hatFit = 'contain', hatDither = false;
+function convertHat() {
+  if (!hatSrc) return;
+  const { width: w, height: h, frameLimit } = rig.cap.info;
+  hatFrames = toHat(hatSrc.slice(0, frameLimit), w, h, { fit: hatFit, dither: hatDither, rgb323, fromRgb323 });
+  $('hatInfo').textContent = `${w}×${h}, ${hatFrames.length} frame${hatFrames.length > 1 ? 's' : ''}` +
+    (hatSrc.length > frameLimit ? ` (first ${frameLimit})` : '');
+  $('hatSend').disabled = false;
+  clearInterval(convertHat.t);
+  let f = 0;
+  paintHat($('hatPreview'), hatFrames[0].px, w, h, fromRgb323);
+  if (hatFrames.length > 1) {
+    convertHat.t = setInterval(() => {
+      f = (f + 1) % hatFrames.length;
+      paintHat($('hatPreview'), hatFrames[f].px, w, h, fromRgb323);
+    }, rig.state.hat.ms);
+  }
+}
+$('hatFile').addEventListener('change', async () => {
+  const file = $('hatFile').files[0];
+  if (!file) return;
+  try {
+    hatSrc = await decodeImage(file, rig.cap.info.frameLimit);
+    // A GIF brings its own timing; use it as the starting frame time.
+    if (hatSrc.length > 1) rig.setHat({ ms: Math.round(hatSrc[0].ms / 20) * 20 || 100 });
+    convertHat();
+  } catch (err) {
+    showBanner(`Couldn't read that image: ${err.message}`);
+  }
 });
+segPick('hatFit', 'fit', (f) => { hatFit = f; segShow('hatFit', 'fit', f); convertHat(); });
+segPick('hatDither', 'dither', (v) => { hatDither = v === '1'; segShow('hatDither', 'dither', v); convertHat(); });
+segShow('hatFit', 'fit', hatFit);
+segShow('hatDither', 'dither', '0');
+$('hatSend').addEventListener('click', () => {
+  if (!rig.cap.available) return showBanner('Pick the hat first (tap the Hat chip).');
+  if (hatFrames) rig.setHatImage(hatFrames);
+});
+rig.cap.addEventListener('progress', (e) => {
+  $('hatBar').style.width = `${Math.round(e.detail * 100)}%`;
+  $('hatSend').classList.toggle('busy', e.detail < 1);
+});
+rig.cap.addEventListener('info', () => convertHat());
 
-// ---------- standby ----------
+function renderHat(h) {
+  segShow('hatFollow', 'follow', h.follow ? 1 : 0);
+  segShow('hatScreen', 'screen', h.screen);
+  segShow('hatLightning', 'lightning', h.lightning);
+  $('hatOwn').classList.toggle('dim', h.follow);
+  $('hatEffect').value = h.effect;
+  $('hatMs').value = h.ms;
+  $('hatMsOut').textContent = `${h.ms}ms`;
+  $('hatBright').value = h.brightness;
+  $('hatBrightOut').textContent = `${h.brightness}%`;
+}
+
+// ---------- hack / purge ----------
+$('purge').addEventListener('click', () => rig.purge());
+function flashLocked() {
+  const a = $('alert');
+  a.classList.remove('shake');
+  void a.offsetWidth; // restart the animation
+  a.classList.add('shake');
+}
+
+// ---------- power ----------
+const asleep = (p) => p === POWER.STANDBY || p === POWER.OFF;
 $('standby').addEventListener('click', () => {
-  rig.setPower(rig.state.power === POWER.STANDBY ? POWER.AWAKE : POWER.STANDBY);
+  if (asleep(rig.state.power)) rig.wake();
+  else rig.standby();
+});
+// Shut down needs a second tap within 3 s, so a stray tap can't kill the rig.
+let offArmed = null;
+$('off').addEventListener('click', () => {
+  const b = $('off');
+  if (offArmed) {
+    clearTimeout(offArmed);
+    offArmed = null;
+    b.classList.remove('armed');
+    rig.shutDown();
+    render(rig.state);
+    return;
+  }
+  b.classList.add('armed');
+  b.textContent = 'TAP TO CONFIRM';
+  offArmed = setTimeout(() => {
+    offArmed = null;
+    b.classList.remove('armed');
+    render(rig.state);
+  }, 3000);
 });
 
 // ---------- render ----------
+const POWER_LABEL = { [POWER.WAKING]: 'BOOTING', [POWER.STANDBY]: 'STANDBY', [POWER.OFF]: 'OFFLINE' };
+
 function render(s) {
-  const m = MODES[s.mode];
-  const accent = m.rainbow ? '#00E5FF' : m.color;
+  const m = modeOf(s);
+  const accent = s.hacked ? '#FF1E1E' : m.breathe ? hex(s.pair[0]) : m.color;
   document.documentElement.style.setProperty('--accent', accent);
-  $('current').textContent = s.power === POWER.STANDBY ? 'STANDBY' : m.name.toUpperCase();
-  modeEls.forEach((el, i) => el.classList.toggle('active', i === s.mode && s.power !== POWER.STANDBY));
-  huntEls.forEach((el, i) => el.classList.toggle('on', i === s.hunt));
-  $('hunt').classList.toggle('off', s.mode !== 2);
-  bright.value = s.brightness;
-  $('brightOut').textContent = `${s.brightness}%`;
-  $('standby').classList.toggle('on', s.power === POWER.STANDBY);
-  $('standby').textContent = s.power === POWER.STANDBY ? 'WAKE' : 'STANDBY';
+  document.body.classList.toggle('hacked', s.hacked);
+  document.body.classList.toggle('asleep', asleep(s.power));
+
+  $('current').textContent = s.hacked ? 'HACKED' : POWER_LABEL[s.power] || m.name.toUpperCase();
+
+  for (const [k, el] of Object.entries(tabEls)) el.classList.toggle('on', k === s.set);
+  buildTiles(s.set);
+  tileEls.forEach((el, i) => el.classList.toggle('active', i === s.idx[s.set] && s.power === POWER.ON));
+
+  const showBreathe = s.set === 'alt' && s.idx.alt === BREATHE_IDX;
+  $('rbpanel').hidden = !(s.set === 'alt' && s.idx.alt === RAINBOW_IDX);
+  if (document.activeElement !== $('rbSpeed')) $('rbSpeed').value = s.rainbow.speed;
+  if (document.activeElement !== $('rbWidth')) $('rbWidth').value = s.rainbow.width;
+  paintRainbow(s.rainbow);
+  $('breathe').hidden = !showBreathe;
+  paintPair(s.pair);
+  if (document.activeElement !== $('c1')) $('c1').value = hex(s.pair[0]);
+  if (document.activeElement !== $('c2')) $('c2').value = hex(s.pair[1]);
+
+  $('alert').hidden = !s.hacked;
+
+  renderBolt(s.bolt);
+  renderHat(s.hat);
+
+  $('standby').textContent = asleep(s.power) ? 'WAKE' : 'STANDBY';
+  $('standby').classList.toggle('on', asleep(s.power));
+  if (!offArmed) $('off').textContent = s.power === POWER.OFF ? 'OFF' : 'SHUT DOWN';
+  $('off').disabled = s.power === POWER.OFF;
 }
 rig.addEventListener('change', (e) => render(e.detail));
 render(rig.state);
 
 // ---------- device status ----------
 const statusEls = {};
-function card(key, label, onTap) {
+function chip(key, label, onTap) {
   const el = document.createElement('button');
   el.className = 'dev';
   el.dataset.s = 'idle';
@@ -68,24 +345,27 @@ function card(key, label, onTap) {
   return el;
 }
 
+chip('clue', 'CLUE', () => pick(rig.clue));
+chip('mask', 'Mask');
+chip('cap', 'Hat', () => pick(rig.cap));
+chip('bolt', 'BOLT', () => pick(rig.bolt));
+
 for (const d of rig.devices) {
-  card(d.key, d.label, () => pick(d));
   d.addEventListener('status', (e) => {
     statusEls[d.key].dataset.s = e.detail.status;
     updateConnect();
     if (d === rig.clue) updateMask();
   });
 }
-card('mask', 'Mask');
 
 function updateMask() {
-  const { L, R } = rig.clue.mask;
-  const el = statusEls.mask;
-  if (!rig.clue.connected) el.dataset.s = 'idle';
-  else el.dataset.s = L && R ? 'connected' : L || R ? 'partial' : 'lost';
-  el.querySelector('span:last-child').textContent = L && !R ? 'Mask L' : R && !L ? 'Mask R' : 'Mask';
+  statusEls.mask.dataset.s = !rig.clue.connected ? 'idle' : rig.clue.mask ? 'connected' : 'lost';
 }
 rig.clue.addEventListener('mask', updateMask);
+rig.clue.addEventListener('refused', (e) => {
+  if (e.detail === 'locked') flashLocked();
+  else if (e.detail === 'asleep') showBanner('The rig is in standby. Tap WAKE first.');
+});
 
 // ---------- connecting ----------
 async function pick(d) {
@@ -99,19 +379,18 @@ async function pick(d) {
 
 function updateConnect() {
   const btn = $('connect');
-  const total = rig.devices.length;
   const next = rig.nextUnconnected();
   if (!next) {
     btn.textContent = 'ALL LINKED';
     btn.disabled = true;
     return;
   }
-  const n = rig.devices.indexOf(next) + 1;
-  btn.textContent = `CONNECT ${next.label.toUpperCase()} ${n}/${total}`;
+  // The CLUE is the one that matters; cap + BOLT are optional extras.
+  btn.textContent = `CONNECT ${next.label.toUpperCase()}`;
   btn.disabled = false;
 }
 
-// Chrome needs a fresh tap for each device picker, so Connect all steps through them.
+// Chrome needs a fresh tap for each device picker, so Connect steps through them.
 $('connect').addEventListener('click', () => {
   const next = rig.nextUnconnected();
   if (next) pick(next);
@@ -128,7 +407,7 @@ function showBanner(msg) {
 // ---------- startup ----------
 if (!navigator.bluetooth) {
   const b = $('banner');
-  b.textContent = 'Web Bluetooth is not available. Open this page in Chrome on Android, over HTTPS.';
+  b.textContent = 'Web Bluetooth is not available. Open this page in Chrome (Android or desktop), over HTTPS.';
   b.hidden = false;
   $('connect').disabled = true;
 } else {
@@ -137,9 +416,8 @@ if (!navigator.bluetooth) {
 }
 
 // Keep the screen on while the controller is open.
-let wakeLock = null;
 async function holdWake() {
-  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
+  try { await navigator.wakeLock?.request('screen'); } catch {}
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') holdWake();

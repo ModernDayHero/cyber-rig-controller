@@ -6,6 +6,7 @@ export const Status = {
   CONNECTING: 'connecting',
   CONNECTED: 'connected',
   LOST: 'lost',             // was connected, retrying
+  READY: 'ready',           // picked and reachable, connects on demand (the hat)
 };
 
 export class RigDevice extends EventTarget {

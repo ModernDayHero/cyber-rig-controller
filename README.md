@@ -1,94 +1,90 @@
-# Cyber Rig Controller
+# STEAMWorkz Rig Controller
 
-Phone controller for the cyber rig lighting (Pro tier). A Web Bluetooth PWA for
-Chrome on the S24 Ultra, hosted on GitHub Pages at **steamworkz.net**.
+Phone controller for the STEAMWorkz cyber rig. A Web Bluetooth PWA for Chrome on
+Android, hosted on GitHub Pages.
 
 ```
-Phone ──BLE──▶ SpotLED cap
-      ──BLE──▶ Sphero BOLT
-      ──BLE──▶ CLUE ──BLE──▶ Mask Bluefruit L + R
+Phone ──BLE──▶ CLUE (watch) ──BLE──▶ Rebreather mask (Circuit Playground Bluefruit)
+      ──BLE──▶ SpotLED hat (32x16)
+      ──BLE──▶ Sphero BOLT (8x8)
 ```
 
-The phone only sends mode changes. Every device runs its own animations and keeps
-its last mode if a link drops. Spec: `claude/cyber-rig-lighting.md` in the project.
+The CLUE owns the mask and is the source of truth: the page sends it commands and
+takes its reports back, so presses on the watch, the random hack and pad-0 standby
+all show up on the phone. The hat and BOLT follow the rig's look or show their own
+content from their tabs. Every device keeps animating on its own if a link drops.
 
-## Develop (VS Code)
+## Tabs
+
+| Tab | What it does |
+|---|---|
+| **RIG** | STEAMWorkz OS set (Dark, Glitch, Rainfall, Matrix) and ALT set (VU, Rainbow, Rebreather, Hack). Rebreather colour pickers, Rainbow speed / width / flow, purge, standby, shut down. |
+| **BOLT** | Follow the rig, or show a look / colour / scrolling text / uploaded image or GIF (8x8, 16 colours). Shake to purge a hack, sensitivity, brightness. |
+| **HAT** | Follow the rig, or upload a PNG / JPEG / GIF (32x16, 256 colours, up to 20 frames) with fit, dithering, transition effect and frame time. Rainfall lightning amount, flip / mirror, brightness. |
+
+## Develop
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173 on the PC
+npm run dev        # http://localhost:5173/cyber-rig-controller/
 ```
 
-`localhost` counts as a secure context, so Web Bluetooth works on the PC in Chrome.
-To test on the phone, either:
-
-- plug it in over USB and use `chrome://inspect` → **Port forwarding** `5173 → localhost:5173`, then open `http://localhost:5173` on the phone, or
-- push to `main` and test the deployed HTTPS site.
-
+`localhost` counts as a secure context, so Web Bluetooth works in Chrome on the PC.
 `npm run build` → `dist/`, `npm run preview` to check the production build.
 
 ## Deploy
 
-1. Create a public GitHub repo and push this folder to `main`.
-2. Repo **Settings → Pages → Source: GitHub Actions**. The workflow in
-   `.github/workflows/deploy.yml` builds and deploys on every push.
-3. Custom domain: `public/CNAME` already says `steamworkz.net`. At your DNS provider
-   add the four GitHub Pages `A` records for the apex (and a `CNAME` for `www` →
-   `<user>.github.io`), then tick **Enforce HTTPS** in the Pages settings.
-
-`CNAME` claims the whole domain for this repo. If steamworkz.net will also host the
-Octlet game or other pages, move the controller to a sub-path (`base: '/rig/'` in
-`vite.config.js`, plus `start_url`/`scope`) or a subdomain such as `rig.steamworkz.net`.
-
-### NAS mirror
-
-```bash
-git clone https://github.com/<user>/cyber-rig-controller.git
-cd cyber-rig-controller && npm ci && npm run build   # serve dist/ over HTTPS
-git pull && npm run build                             # to update
-```
+Pushing to `main` runs `.github/workflows/deploy.yml`, which builds and publishes to
+GitHub Pages at `https://<user>.github.io/cyber-rig-controller/` (Settings → Pages →
+Source: GitHub Actions). For a custom domain at the root, build with `BASE=/` and
+add `public/CNAME`.
 
 ## On the phone
 
 - Chrome, not Samsung Internet. Open the site, then **Add to home screen**.
 - Battery → Background usage limits → Chrome in **Never sleeping apps**.
-- Location and Nearby devices permissions on for Chrome.
-- Force-close the SpotLED app first: the cap accepts one connection.
-- Start of night: tap **Connect** three times (Cap, BOLT, CLUE), one picker each.
-  Tap a device chip to reconnect just that one.
+- Location and Nearby devices permissions on for Chrome, or the Bluetooth picker is empty.
+- Close the SpotLED app first: the hat accepts one connection.
+- Tap each status chip once (CLUE, Hat, BOLT) and pick the device. Chrome remembers them.
+
+## Devices
+
+### CLUE (`RIG-CLUE`, Nordic UART, text lines)
+
+| Phone → CLUE | |
+|---|---|
+| `M <os\|alt> <i>` | pick a mode (index into the set) |
+| `C r g b r g b` | rebreather colours (switches to Rebreather) |
+| `R speed width dir` | rainbow settings: speed 5–250 (50 = 1x), width 5–200, dir 1/0 |
+| `P standby\|off\|wake` | power |
+| `H` / `K` / `?` | start the hack / purge it / report everything |
+
+CLUE → phone, on every change: `M <set> <i>`, `C …`, `R …`, `P on|waking|blink|off`,
+`V 0|1` (hacked: M and C are refused, K still purges), `L 0|1` (mask link), `E <why>`.
+
+### SpotLED hat (`SpotLED_2986`)
+
+32x16, full colour, **one byte per pixel, RGB323** (`rrr gg bbb`), frame limit 20,
+120-byte transfer buffer. Protocol from `python-spotled`, but notifications start
+with the length byte (the library's 3 leading bytes are a Linux gattlib artefact).
+The hat drops idle links, so the page connects per upload and lets go ~8 s later.
+Uploads take ~0.35 s per frame.
+
+### Sphero BOLT (`SB-…`)
+
+Sphero v2 API, ported from `spherov2`: targeted packets carry the source id, and
+writes go in 20-byte pieces, waiting for each response. Each look is an 8x8
+animation uploaded once and looped by the BOLT. Collision events = shake.
 
 ## Layout
 
 | File | What it does |
 |---|---|
-| `src/config.js` | Modes, palette, command strings (`M`, `B`, `H`, `S`, `T`, `P`) |
-| `src/rig.js` | State, persistence, fan-out to devices |
-| `src/ble/device.js` | Shared connect / auto-reconnect / status logic |
-| `src/ble/clue.js` | CLUE over Nordic UART; relays to the mask, reports watch picks + mask links |
-| `src/ble/bolt.js` | Sphero v2 packets (ported from `spherov2`), keep-alive |
-| `src/ble/spotled.js` | SpotLED transfer protocol (ported from `python-spotled`) |
+| `src/config.js` | Mode sets, palette, phone ↔ CLUE commands |
+| `src/rig.js` | State, persistence, CLUE reports, BOLT / hat fan-out |
+| `src/image.js` | Image / GIF decoding and conversion for the BOLT and hat |
+| `src/ble/device.js` | Shared connect / auto-reconnect / status |
+| `src/ble/clue.js` | CLUE link |
+| `src/ble/bolt.js` | BOLT packets, animations, text, shake |
+| `src/ble/spotled.js` | Hat transfer, RGB323, the rig looks (Octlet logo, rain, virus…) |
 | `src/main.js` | UI wiring, wake lock |
-
-## Status
-
-| Device | State |
-|---|---|
-| CLUE | Ready to test. Firmware must advertise as `RIG-CLUE…` and use the line format in `clue.js` |
-| BOLT | Ported from `spherov2`, untested. Shows a solid mode colour for now |
-| Cap | Transport + brightness ported, untested. **Animation frame encoding is TODO** |
-
-### Firmware contract for the CLUE (proposed)
-
-- Advertise name starting `RIG-CLUE`, Nordic UART service.
-- Accept newline-terminated lines: `M0`–`M5` (Glitch arrives as `M1 S<seed>`),
-  `B10`–`B100`, `H0`/`H1`, `P0`/`P1`/`P2`. Relay each to both Bluefruits.
-- Send back: `M<n>` when a mode is picked on the watch, `L0`/`L1` and `R0`/`R1`
-  when the left/right Bluefruit link drops or comes up.
-
-## Next
-
-1. CLUE firmware against the contract above, then test CLUE + mask end to end.
-2. Verify BOLT UUIDs/commands on hardware.
-3. SpotLED: confirm the hat's GATT layout in nRF Connect, port `AnimationData`/`FrameData`
-   and `gen_color_bitmap`, build one animation per mode. The hat has no "play preset N"
-   command, so each mode change uploads that mode's frames.

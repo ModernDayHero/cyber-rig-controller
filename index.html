@@ -5,15 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#000000" />
     <title>Rig Controller</title>
-    <link rel="icon" href="/icons/icon-192.png" />
-    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="icon" href="icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
   </head>
   <body>
     <main class="rig" id="app">
       <header class="top">
         <div class="brand">
           <span class="brand-mark">◢</span>
-          <span>RIG//CTRL</span>
+          <span>STEAMWorkz//RIG</span>
         </div>
         <span class="current" id="current">DARK</span>
       </header>
@@ -22,22 +22,209 @@
 
       <p class="banner" id="banner" hidden></p>
 
-      <section class="modes" id="modes" aria-label="Modes"></section>
-
-      <section class="row hunt" id="hunt" aria-label="Hunt style">
-        <span class="label">HUNT</span>
-        <div class="seg" id="huntSeg"></div>
+      <section class="alert" id="alert" hidden>
+        <div class="alert-text">
+          <strong>SYSTEM COMPROMISED</strong>
+          <span>octlet.exe owns the rig. Shake the CLUE or BOLT, wave over the CLUE, or purge.</span>
+        </div>
+        <button class="purge" id="purge">PURGE</button>
       </section>
 
-      <section class="row bright" aria-label="Brightness">
-        <span class="label">BRIGHT</span>
-        <input type="range" id="bright" min="10" max="100" step="5" />
-        <output id="brightOut">35%</output>
-      </section>
+      <nav class="views" id="views" aria-label="Device">
+        <button data-view="rig">RIG</button>
+        <button data-view="bolt">BOLT</button>
+        <button data-view="hat">HAT</button>
+      </nav>
+
+      <!-- ================= RIG ================= -->
+      <div class="view" id="view-rig">
+        <nav class="tabs" id="tabs" aria-label="Mode set"></nav>
+
+        <section class="modes" id="modes" aria-label="Modes"></section>
+
+        <section class="breathe" id="breathe" hidden aria-label="Rebreather colors">
+          <div class="preview" id="preview"></div>
+          <label class="swatch">
+            <input type="color" id="c1" />
+            <span>COLOR 1</span>
+          </label>
+          <button class="ghost swap" id="swap" aria-label="Swap colors">⇄</button>
+          <label class="swatch">
+            <input type="color" id="c2" />
+            <span>COLOR 2</span>
+          </label>
+        </section>
+
+        <section class="rbpanel" id="rbpanel" hidden aria-label="Rainbow settings">
+          <div class="rbpreview" id="rbpreview"></div>
+          <div class="row">
+            <span class="label">SPEED</span>
+            <input type="range" id="rbSpeed" />
+            <output id="rbSpeedOut">1.0x</output>
+          </div>
+          <div class="row">
+            <span class="label">WIDTH</span>
+            <input type="range" id="rbWidth" />
+            <output id="rbWidthOut">30%</output>
+          </div>
+          <div class="row">
+            <span class="label">FLOW</span>
+            <div class="seg" id="rbDir">
+              <button data-dir="0">◀ LEFT</button>
+              <button data-dir="1">RIGHT ▶</button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ================= BOLT ================= -->
+      <div class="view" id="view-bolt" hidden>
+        <div class="row">
+          <span class="label">SHOW</span>
+          <div class="seg" id="boltFollow">
+            <button data-follow="1">FOLLOW RIG</button>
+            <button data-follow="0">OWN</button>
+          </div>
+        </div>
+
+        <section class="panel" id="boltOwn">
+          <div class="seg seg4" id="boltType">
+            <button data-type="look">LOOK</button>
+            <button data-type="color">COLOR</button>
+            <button data-type="text">TEXT</button>
+            <button data-type="image">IMAGE</button>
+          </div>
+
+          <div class="looks" id="boltLooks" data-pane="look"></div>
+
+          <div class="pane" data-pane="color">
+            <label class="swatch wide">
+              <input type="color" id="boltColor" />
+              <span>MATRIX COLOR</span>
+            </label>
+          </div>
+
+          <div class="pane" data-pane="text">
+            <input class="text" id="boltText" maxlength="25" placeholder="text to scroll" />
+            <div class="row">
+              <label class="swatch mini"><input type="color" id="boltTextColor" /></label>
+              <span class="label">SPEED</span>
+              <input type="range" id="boltTextSpeed" min="1" max="30" step="1" />
+              <output id="boltTextSpeedOut">10</output>
+            </div>
+            <button class="ghost" id="boltTextSend">SCROLL IT</button>
+          </div>
+
+          <div class="pane" data-pane="image">
+            <div class="imgrow">
+              <canvas class="pix bolt-pix" id="boltPreview" width="8" height="8"></canvas>
+              <div class="imgctl">
+                <label class="file">
+                  <input type="file" id="boltFile" accept="image/png,image/jpeg,image/gif,image/webp" />
+                  <span>UPLOAD IMAGE / GIF</span>
+                </label>
+                <div class="seg seg3" id="boltFit">
+                  <button data-fit="contain">FIT</button>
+                  <button data-fit="cover">FILL</button>
+                  <button data-fit="stretch">STRETCH</button>
+                </div>
+                <span class="hint" id="boltImgInfo">8×8, up to 16 colours</span>
+              </div>
+            </div>
+            <button class="ghost" id="boltImgSend" disabled>SEND TO BOLT</button>
+          </div>
+        </section>
+
+        <div class="row">
+          <span class="label">SHAKE</span>
+          <div class="seg" id="boltShake">
+            <button data-shake="1">PURGES HACK</button>
+            <button data-shake="0">IGNORED</button>
+          </div>
+        </div>
+        <div class="row">
+          <span class="label">SENSE</span>
+          <input type="range" id="boltSense" min="1" max="10" step="1" />
+          <output id="boltSenseOut">5</output>
+        </div>
+        <div class="row">
+          <span class="label">BRIGHT</span>
+          <input type="range" id="boltBright" min="10" max="100" step="5" />
+          <output id="boltBrightOut">35%</output>
+        </div>
+      </div>
+
+      <!-- ================= HAT ================= -->
+      <div class="view" id="view-hat" hidden>
+        <div class="row">
+          <span class="label">SHOW</span>
+          <div class="seg" id="hatFollow">
+            <button data-follow="1">FOLLOW RIG</button>
+            <button data-follow="0">OWN IMAGE</button>
+          </div>
+        </div>
+
+        <section class="panel" id="hatOwn">
+          <canvas class="pix hat-pix" id="hatPreview" width="32" height="16"></canvas>
+          <label class="file">
+            <input type="file" id="hatFile" accept="image/png,image/jpeg,image/gif,image/webp" />
+            <span>UPLOAD PNG / JPEG / GIF</span>
+          </label>
+          <span class="hint" id="hatInfo">32×16, 256 colours, up to 20 frames</span>
+          <div class="seg seg3" id="hatFit">
+            <button data-fit="contain">FIT</button>
+            <button data-fit="cover">FILL</button>
+            <button data-fit="stretch">STRETCH</button>
+          </div>
+          <div class="row">
+            <span class="label">DITHER</span>
+            <div class="seg" id="hatDither">
+              <button data-dither="0">OFF</button>
+              <button data-dither="1">ON</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="label">EFFECT</span>
+            <select class="select" id="hatEffect"></select>
+          </div>
+          <div class="row">
+            <span class="label">FRAME</span>
+            <input type="range" id="hatMs" min="40" max="2000" step="20" />
+            <output id="hatMsOut">200ms</output>
+          </div>
+          <button class="ghost send" id="hatSend" disabled>SEND TO HAT<span class="bar" id="hatBar"></span></button>
+        </section>
+
+        <div class="row">
+          <span class="label">BOLTS</span>
+          <div class="seg seg4" id="hatLightning">
+            <button data-lightning="0">OFF</button>
+            <button data-lightning="1">LOW</button>
+            <button data-lightning="2">MED</button>
+            <button data-lightning="3">STORM</button>
+          </div>
+        </div>
+        <span class="hint">Rainfall lightning: 0–3 strikes per 2.2 s loop</span>
+        <div class="row">
+          <span class="label">FLIP</span>
+          <div class="seg seg4" id="hatScreen">
+            <button data-screen="0">NORMAL</button>
+            <button data-screen="1">UPSIDE</button>
+            <button data-screen="2">MIRROR</button>
+            <button data-screen="3">BOTH</button>
+          </div>
+        </div>
+        <div class="row">
+          <span class="label">BRIGHT</span>
+          <input type="range" id="hatBright" min="10" max="100" step="5" />
+          <output id="hatBrightOut">35%</output>
+        </div>
+      </div>
 
       <footer class="bottom">
         <button class="ghost" id="standby">STANDBY</button>
-        <button class="connect" id="connect">CONNECT ALL</button>
+        <button class="ghost danger" id="off">SHUT DOWN</button>
+        <button class="connect" id="connect">CONNECT</button>
       </footer>
     </main>
     <script type="module" src="/src/main.js"></script>

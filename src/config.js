@@ -1,30 +1,71 @@
-// Single source of truth for modes, palette and the rig command format.
-// Matches claude/cyber-rig-lighting.md (sections 1–4).
+// Single source of truth for the modes, palette and the phone <-> CLUE protocol.
+// Mirrors the CLUE firmware (edgerunner_firmware/src/rig.py, SETS + phone_cmd).
 
-export const MODES = [
-  { id: 0, name: 'Dark',      color: '#A03CFF', rgb: [160, 60, 255] },
-  { id: 1, name: 'Glitch',    color: '#FF2BD6', rgb: [255, 43, 214], alt: '#00E5FF' },
-  { id: 2, name: 'Hunt',      color: '#FF1E1E', rgb: [255, 30, 30] },
-  { id: 3, name: 'Matrix',    color: '#22FF66', rgb: [34, 255, 102] },
-  { id: 4, name: 'Rainbow',   color: '#FFFFFF', rgb: [255, 255, 255], rainbow: true },
-  { id: 5, name: 'Peace out', color: '#FFFFFF', rgb: [255, 255, 255] },
-];
+// The two sets the CLUE cycles with A/B; pad 1 (or the tabs here) switches set.
+// `key` is the byte the CLUE sends the mask for that mode.
+export const SETS = {
+  os: {
+    label: 'STEAMWorkz OS',
+    modes: [
+      { key: 'D', name: 'Dark',     color: '#A03CFF', hint: 'purple breathing' },
+      { key: 'X', name: 'Glitch',   color: '#FF2BD6', alt: '#00E5FF', hint: 'bursts + cutouts' },
+      { key: 'r', name: 'Rainfall', color: '#B040FF', alt: '#00E5FF', hint: 'rain + lightning' },
+      { key: 'M', name: 'Matrix',   color: '#22FF66', hint: 'green digital rain' },
+    ],
+  },
+  alt: {
+    label: 'ALT',
+    modes: [
+      { key: 'A', name: 'VU',         color: '#FFC800', hint: 'mic level meter' },
+      { key: 'R', name: 'Rainbow',    color: '#00E5FF', rainbow: true, hint: 'slow wave' },
+      { key: 'B', name: 'Rebreather', color: '#00E5FF', breathe: true, hint: 'breathes two colors' },
+      { key: 'H', name: 'Hack',       color: '#FF1E1E', alt: '#FF2BD6', hint: 'release the virus' },
+    ],
+  },
+};
+export const BREATHE_IDX = 2; // Rebreather's slot in the ALT set
+export const RAINBOW_IDX = 1; // Rainbow's slot in the ALT set
 
-export const HUNT_STYLES = [
-  { id: 0, name: 'Sweep' },
-  { id: 1, name: 'Heartbeat' },
-];
+// Default rebreather pair (CLUE boots with this too).
+export const DEFAULT_PAIR = [[160, 60, 255], [0, 229, 255]];
 
+// Rainbow settings, same numbers the CLUE and mask use (bytes):
+//   speed 5-250 (50 = 1x), width 5-200 (% of the colour wheel across the rig), dir 1 / 0
+export const RAINBOW = {
+  speed: { min: 5, max: 250, step: 5, default: 50 },
+  width: { min: 5, max: 200, step: 5, default: 30 },
+};
+export const DEFAULT_RAINBOW = { speed: 50, width: 30, dir: 1 };
+
+// BOLT + hat brightness default; the mask has its own fixed brightness cap.
 export const BRIGHTNESS = { min: 10, max: 100, default: 35 };
 
-// Plain-text lines sent to the CLUE over Nordic UART. The CLUE relays them to the mask.
+// CLUE power states as it reports them.
+export const POWER = { ON: 'on', WAKING: 'waking', STANDBY: 'blink', OFF: 'off' };
+
+// Phone -> CLUE text lines (newline-terminated) over Nordic UART.
 export const cmd = {
-  mode: (id) => `M${id}`,
-  modeWithSeed: (id, seed) => `M${id} S${seed}`, // Glitch: shared seed so bursts line up
-  brightness: (pct) => `B${pct}`,
-  hunt: (style) => `H${style}`,
-  power: (state) => `P${state}`,                  // 0 deep sleep, 1 standby, 2 awake
-  tick: () => 'T',
+  mode: (set, i) => `M ${set} ${i}`,
+  colors: ([a, b]) => `C ${[...a, ...b].join(' ')}`,
+  rainbow: ({ speed, width, dir }) => `R ${speed} ${width} ${dir}`,
+  standby: () => 'P standby',
+  off: () => 'P off',
+  wake: () => 'P wake',
+  hack: () => 'H',
+  purge: () => 'K',
+  query: () => '?',
 };
 
-export const POWER = { DEEP_SLEEP: 0, STANDBY: 1, AWAKE: 2 };
+export const modeOf = (s) => SETS[s.set].modes[s.idx[s.set]];
+
+export const hex = ([r, g, b]) => '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
+export const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+
+/** What the cap and BOLT should show for the current rig state: one key + colour. */
+export function look(s) {
+  if (s.power === POWER.OFF || s.power === POWER.STANDBY) return { key: s.power, rgb: [0, 0, 0], on: false };
+  if (s.hacked) return { key: 'hack', rgb: [255, 30, 30], on: true };
+  const m = modeOf(s);
+  const c = m.breathe ? s.pair[0] : rgb(m.color);
+  return { key: m.key, rgb: c, on: true };
+}
