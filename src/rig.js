@@ -54,6 +54,7 @@ export class Rig extends EventTarget {
     this.devices = [this.clue, this.cap, this.bolt]; // also the Connect-all order
 
     this.clue.addEventListener('ready', async () => {
+      this.clue.send(cmd.time());           // the CLUE has no battery clock: set it
       await this.clue.applyState();
       for (const k of Object.keys(this.state.tunes)) this.clue.send(this._tuneCmd(k));  // CLUE -> mask
     });
@@ -94,6 +95,8 @@ export class Rig extends EventTarget {
     });
 
     this._timers = {};
+    // Keep the CLUE's watch accurate: re-sync every 10 minutes while connected.
+    setInterval(() => { if (this.clue.connected) this.clue.send(cmd.time()); }, 10 * 60 * 1000);
   }
 
   _save() {

@@ -20,6 +20,8 @@ export const SETS = {
       { key: 'R', name: 'Rainbow',    color: '#00E5FF', rainbow: true, hint: 'slow wave' },
       { key: 'B', name: 'Rebreather', color: '#00E5FF', breathe: true, hint: 'breathes two colors' },
       { key: 'H', name: 'Hack',       color: '#FF1E1E', alt: '#FF2BD6', hint: 'release the virus' },
+      // Clock face on the CLUE; the mask / hat / BOLT run Dark (lookAs) meanwhile.
+      { key: 'W', name: 'Watch',      color: '#39B6C0', hint: 'Octlet clock', lookAs: 'D' },
     ],
   },
 };
@@ -97,6 +99,9 @@ export const cmd = {
   colors: ([a, b]) => `C ${[...a, ...b].join(' ')}`,
   rainbow: ({ speed, width, dir }) => `R ${speed} ${width} ${dir}`,
   hackTimer: ({ min, max }) => `T ${min} ${max}`,
+  // The phone's local time for the CLUE's clock: y mo d h mi s weekday (0 = Monday).
+  time: (d = new Date()) =>
+    `W ${d.getFullYear()} ${d.getMonth() + 1} ${d.getDate()} ${d.getHours()} ${d.getMinutes()} ${d.getSeconds()} ${(d.getDay() + 6) % 7}`,
   tune: (key, { bright, colors }) => {
     const [a = [0, 0, 0], b = a] = colors;
     return `S ${key} ${bright} ${[...a, ...b].join(' ')}`;
@@ -120,5 +125,5 @@ export function look(s) {
   if (s.hacked) return { key: 'hack', rgb: [255, 30, 30], on: true };
   const m = modeOf(s);
   const c = m.breathe ? s.pair[0] : rgb(m.color);
-  return { key: m.key, rgb: c, on: true };
+  return { key: m.lookAs || m.key, rgb: c, on: true };
 }
