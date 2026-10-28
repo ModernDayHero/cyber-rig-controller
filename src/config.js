@@ -120,6 +120,7 @@ export const cmd = {
   // Incoming call ('c') / message ('m'); text = caller or message, shown on the CLUE.
   alert: (kind, text = '') => `N ${kind}${text ? ' ' + text : ''}`,
   egg: (name) => `X ${name}`,
+  mute: (on) => `Q ${on ? 1 : 0}`,
   query: () => '?',
 };
 

@@ -21,6 +21,7 @@
 #              green -> yellow -> red at the top, with a falling peak dot
 #   G ghost    dim white wisps drifting round, the odd "boo" flare      (phone /boo)
 #   J pumpkin  orange candle flicker, a yellow core where it burns hot  (phone /pumpkin)
+#   Q m        mute (2 bytes): m = 1 silences every sound, 0 lets them play
 #   N k s      alert (3 bytes) over whatever mode is running: k = c call (holo-call
 #              ring spinning round) / m message (three cyan flashes); s = 1 also beeps
 
@@ -62,7 +63,7 @@ ORANGE = (255, 80, 0)
 CANDLE = (255, 170, 20)
 
 MODE_CHARS = "DXHhMRPAIFVWOrGJ"
-PACKETS = {"C": 3, "B": 6, "S": 3, "Z": 8, "N": 2}   # command -> number of data bytes that follow
+PACKETS = {"C": 3, "B": 6, "S": 3, "Z": 8, "N": 2, "Q": 1}   # command -> number of data bytes that follow
 
 # Sounds. Segments: (start s, step s, notes Hz, side); the notes play one after
 # another, step each, 0 = rest. side 0 = left, 1 = right, 2 = both.
@@ -148,8 +149,11 @@ class Buzzer:
         self.segs = None
         self.t0 = 0.0
         self.hz = 0
+        self.muted = False
 
     def play(self, kind):
+        if self.muted:
+            return
         self.segs = SOUNDS.get(kind)
         self.t0 = time.monotonic()
 
@@ -234,6 +238,12 @@ class Lens:
             self.tune[k] = (data[1] / 100, tuple(data[2:5]), tuple(data[5:8]))
         elif m == "N":
             self.alert(chr(data[0]), data[1])
+        elif m == "Q":
+            if self.buzz:
+                self.buzz.muted = bool(data[0])
+                if self.buzz.muted:              # cut anything already playing
+                    self.buzz.segs = None
+                    self.buzz._tone(0)
         else:
             self.set_mode(m)
 

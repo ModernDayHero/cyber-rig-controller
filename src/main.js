@@ -154,6 +154,7 @@ function sendAlert(kind) {
   setTimeout(() => b.classList.remove('on'), kind === 'c' ? 5200 : 1000);
 }
 for (const b of $('alertSend').querySelectorAll('button')) b.addEventListener('click', () => sendAlert(b.dataset.kind));
+for (const b of $('mute').querySelectorAll('button')) b.addEventListener('click', () => rig.setMuted(b.dataset.muted === '1'));
 
 const SLASH = {
   hack: () => rig.hack(),
@@ -405,6 +406,7 @@ function render(s) {
   $('rbpanel').hidden = !(s.set === 'alt' && s.idx.alt === RAINBOW_IDX);
   $('hackpanel').hidden = !(s.set === 'alt' && s.idx.alt === HACK_IDX);
   renderHackTimer(s.hackTimer);
+  segShow('mute', 'muted', s.muted ? 1 : 0);
   renderTune(s);
   if (document.activeElement !== $('rbSpeed')) $('rbSpeed').value = s.rainbow.speed;
   if (document.activeElement !== $('rbWidth')) $('rbWidth').value = s.rainbow.width;

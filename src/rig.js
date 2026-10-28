@@ -41,6 +41,7 @@ export class Rig extends EventTarget {
       rainbow: saved.rainbow ?? DEFAULT_RAINBOW,
       hackTimer: saved.hackTimer ?? DEFAULT_HACK_TIMER,
       tunes: saved.tunes ?? {},          // only modes the user changed: key -> {bright, colors}
+      muted: saved.muted ?? false,       // silences the CLUE + mask (sent on every connect)
       bolt: { ...DEFAULT_BOLT, ...saved.bolt, content: { ...DEFAULT_BOLT.content, ...saved.bolt?.content } },
       hat: { ...DEFAULT_HAT, ...saved.hat },
       power: POWER.ON,
@@ -55,6 +56,7 @@ export class Rig extends EventTarget {
 
     this.clue.addEventListener('ready', async () => {
       this.clue.send(cmd.time());           // the CLUE has no battery clock: set it
+      this.clue.send(cmd.mute(this.state.muted));
       await this.clue.applyState();
       for (const k of Object.keys(this.state.tunes)) this.clue.send(this._tuneCmd(k));  // CLUE -> mask
     });
@@ -101,8 +103,8 @@ export class Rig extends EventTarget {
   }
 
   _save() {
-    const { set, idx, pair, rainbow, hackTimer, tunes, bolt, hat } = this.state;
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ set, idx, pair, rainbow, hackTimer, tunes, bolt, hat })); } catch {}
+    const { set, idx, pair, rainbow, hackTimer, tunes, muted, bolt, hat } = this.state;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ set, idx, pair, rainbow, hackTimer, tunes, muted, bolt, hat })); } catch {}
   }
 
   /** What the rig looks like right now, for the devices that follow it. */
@@ -267,6 +269,10 @@ export class Rig extends EventTarget {
   purge() { this.clue.send(cmd.purge()); }
   alert(kind, text) { this.clue.send(cmd.alert(kind, text)); }
   hack() { this.clue.send(cmd.hack()); }
+  setMuted(on) {
+    this.clue.send(cmd.mute(on));
+    this._update({ muted: on });
+  }
 
   /** BOLT drive mode on / off (the DRIVE panel does the steering and the stopping). */
   setDriving(on) {

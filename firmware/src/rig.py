@@ -46,6 +46,7 @@
 #                  P standby|off|wake
 #                  N c|m [text]     incoming call / message: mask lights + sound everywhere
 #                  X boo|pumpkin|secret   easter-egg sequence (~12 s), then back to the mode
+#                  Q 0|1            mute: 1 silences the CLUE and the mask (sent on connect)
 #                  H  start the hack     K  purge it     ?  report everything
 #   CLUE -> phone  M <set> <i> / C r g b r g b / R sp w dir / T min max / P on|waking|blink|off /
 #                  V 0|1 (hacked) / L 0|1 0|1 (left / right Bluefruit links), sent on every change
@@ -682,6 +683,7 @@ def link_step(now):
                 term_push("> LINK OK // rebreather " + s, CYAN)
             for k, v in tunes.items():         # the mask forgets on restart
                 send(b"Z" + k.encode() + v)
+            send(b"Q" + (b"\x01" if muted else b"\x00"))
             resend()
             break                               # the other side on the next scan
         ble.stop_scan()
@@ -762,6 +764,8 @@ def phone_cmd(w):
     c = w[0]
     if c == "?":
         last_rep.clear()
+    elif c == "Q":                         # mute works asleep too
+        set_mute(w[1] == "1")
     elif c == "P":
         if w[1] in ("standby", "off") and power in ("on", "waking"):
             go_standby()
@@ -904,9 +908,19 @@ tone_t = 0.0
 alert_k = None
 alert_end = 0.0
 
+muted = False             # phone Q: silences the CLUE and the mask (lights still run)
+
 def play(k):
     global tone_segs, tone_t
-    tone_segs, tone_t = SOUNDS[k], time.monotonic()
+    if not muted:
+        tone_segs, tone_t = SOUNDS[k], time.monotonic()
+
+def set_mute(on):
+    global muted, tone_segs
+    muted = on
+    if on:
+        tone_segs = None
+    send(b"Q" + (b"\x01" if on else b"\x00"))
 
 def tone_step(now):
     """Play the next phrase once its time comes (called every loop). The notes are
