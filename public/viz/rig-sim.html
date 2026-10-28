@@ -1,0 +1,328 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Edgerunner Rig Sim</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: a night workbench. CLUE watch on top, goggles bridge below, mode deck at the bottom.
+   Deliberately single dark theme: it is a light show. */
+:root{
+  --bench:#0b0a10; --mat:#14121c; --edge:#2a2536; --ink:#ece8f4; --dim:#8c84a0;
+  --pcb:#17151d; --pad:#c9a650; --purple:#a03cff; --mag:#ff2bd6; --cyan:#00e5ff; --red:#ff1e1e;
+  --display:"Oxanium","Segoe UI",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  color-scheme:dark;
+}
+html,body{height:auto}
+body{background:var(--bench);color:var(--ink);font:400 14px/1.5 var(--mono)}
+.wrap{max-width:980px;margin:0 auto;padding-block:20px 40px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:grid;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 16px}
+h1{font:700 clamp(22px,4vw,30px)/1.1 var(--display);margin:0;letter-spacing:.02em;text-wrap:balance}
+.sub{color:var(--dim);font-size:12.5px;margin:0}
+.bench{background:var(--mat);border:1px solid var(--edge);border-radius:14px;padding:18px;display:grid;gap:18px;justify-items:center}
+.lbl{font:600 10.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+/* CLUE */
+.clue{position:relative;width:min(100%,330px);aspect-ratio:52/43;background:var(--pcb);border:1px solid var(--edge);
+  border-radius:12px;display:grid;grid-template-columns:44px 1fr 44px;align-items:center;padding:10px 6px;gap:6px;
+  box-shadow:0 0 40px -12px var(--glow,transparent)}
+.screen{width:100%;aspect-ratio:1;background:#000;border-radius:3px;outline:2px solid #050508;overflow:hidden}
+#clueScreen{width:100%;height:100%;display:block;image-rendering:pixelated}
+.hw{display:grid;justify-items:center;gap:6px}
+.hwbtn{width:30px;height:30px;border-radius:50%;border:3px solid #3a3446;background:#0f0e14;color:var(--dim);
+  font:600 11px var(--mono);cursor:pointer}
+.hwbtn:active{transform:scale(.94)}
+.hwbtn:focus-visible,.chip:focus-visible,.act:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.edgepins{position:absolute;left:12%;right:12%;bottom:-7px;height:7px;
+  background:repeating-linear-gradient(90deg,var(--pad) 0 5px,transparent 5px 8px);border-radius:0 0 2px 2px;opacity:.75}
+/* goggles */
+.goggles{display:flex;align-items:center;justify-content:center;gap:0;width:100%;flex-wrap:nowrap}
+.cp{display:grid;justify-items:center;gap:8px;flex:0 1 230px;min-width:0}
+.cp canvas{width:100%;max-width:230px;aspect-ratio:1;display:block}
+.bridge{flex:0 0 clamp(28px,8vw,70px);height:46px;position:relative}
+.bridge svg{width:100%;height:100%;display:block}
+/* deck */
+.deck{display:grid;gap:12px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font:600 12.5px var(--mono);color:var(--ink);background:#1c1926;border:1px solid var(--edge);border-radius:999px;
+  padding:7px 13px;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.chip i{width:9px;height:9px;border-radius:50%;background:var(--c);box-shadow:0 0 8px var(--c)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bench);border-color:transparent}
+.acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.act{font:700 13px var(--display);letter-spacing:.06em;text-transform:uppercase;border-radius:8px;padding:9px 16px;cursor:pointer;border:1px solid}
+.act.virus{background:#2a0508;color:#ff8a8a;border-color:#6b141b}
+.act.purge{background:#071a1d;color:#8ff2ff;border-color:#13505a}
+.act:disabled{opacity:.4;cursor:not-allowed}
+.bus{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--dim)}
+.bus b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.bits{display:inline-flex;gap:3px;vertical-align:middle}
+.bits span{width:10px;height:10px;border-radius:2px;background:#26222f}
+.bits span.on{background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+.note{color:var(--dim);font-size:12px;margin:0;max-width:70ch}
+@media (max-width:520px){.clue{grid-template-columns:34px 1fr 34px}.hwbtn{width:26px;height:26px}}
+@media (prefers-reduced-motion:reduce){.hwbtn:active{transform:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Edgerunner Rig Sim</h1>
+    <p class="sub">CLUE watch → BLE → Bluefruit → wire → Express</p>
+  </header>
+
+  <section class="bench" aria-label="Simulated hardware">
+    <div class="hw" style="width:100%;justify-items:center">
+      <span class="lbl">CLUE · wrist controller</span>
+      <div class="clue" id="clue">
+        <div class="hw"><button class="hwbtn" id="hwA" aria-label="CLUE button A, release virus">A</button></div>
+        <div class="screen"><canvas id="clueScreen" width="240" height="240" aria-label="CLUE screen"></canvas></div>
+        <div class="hw"><button class="hwbtn" id="hwB" aria-label="CLUE button B, purge">B</button></div>
+        <div class="edgepins"></div>
+      </div>
+    </div>
+
+    <div class="goggles">
+      <div class="cp"><canvas id="cpL" width="460" height="460" aria-label="Circuit Playground Bluefruit lens"></canvas><span class="lbl">Bluefruit · left lens</span></div>
+      <div class="bridge"><svg viewBox="0 0 70 46" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0 23 C 20 6, 50 6, 70 23" stroke="#2a1a33" stroke-width="6" fill="none"/>
+        <path id="wireGlow" d="M0 23 C 20 6, 50 6, 70 23" stroke="#a03cff" stroke-width="2" fill="none" stroke-dasharray="4 6"/>
+      </svg></div>
+      <div class="cp"><canvas id="cpR" width="460" height="460" aria-label="Circuit Playground Express lens"></canvas><span class="lbl">Express · right lens</span></div>
+    </div>
+  </section>
+
+  <section class="deck" aria-label="Controls">
+    <span class="lbl">Modes</span>
+    <div class="chips" id="chips"></div>
+    <div class="acts">
+      <button class="act virus" id="btnVirus">Release virus</button>
+      <button class="act purge" id="btnPurge" disabled>Purge</button>
+    </div>
+    <div class="bus" aria-live="polite">
+      <span>Byte on the bus: <b id="byteChar">D</b> <b id="byteHex">0x44</b> <span class="bits" id="bits"></span></span>
+      <span>CLUE: <b id="clueState">idle</b></span>
+    </div>
+    <p class="note">Mode chips act like the CLUE menu. Audio uses a simulated 124 BPM track here; on the boards each lens listens with its own mic. The Octlet's eight legs light the same byte the CLUE sends, and both lenses run the same code as leds.py, so this preview matches what the boards will do.</p>
+  </section>
+</div>
+
+<script>
+(()=>{
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const SHEET="data:image/png;base64,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", MINI="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAQCAMAAABA3o1rAAADAFBMVEUAAAAAyNLw8P8UKKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD3yFq2AAAAVklEQVR4nL2QwQ4AIAhCxf7/n5vNCmytW3Z6CJaZ/Sug8MsB8SAOqh3KZBjdOnGUEkdMFagjwV1HMIfgrTkosHkGQiAH8VTuV+Ra9Mi61rKtvp2ff6kOi4MAt6swRFoAAAAASUVORK5CYII=";
+const PADS=[[[17, 57], [20, 47], [13, 40], [21, 34], [20, 24], [30, 23], [35, 14], [44, 20]], [[16, 56], [20, 49], [13, 38], [21, 35], [21, 22], [29, 24], [36, 14], [42, 20]], [[18, 59], [20, 46], [13, 42], [22, 33], [19, 25], [31, 22], [33, 15], [45, 20]], [[17, 57], [20, 47], [13, 40], [21, 34], [20, 24], [30, 23], [35, 14], [44, 20]], [[17, 57], [20, 47], [13, 40], [21, 34], [20, 24], [30, 23], [35, 14], [44, 20]], [[17, 57], [20, 47], [13, 40], [21, 34], [20, 24], [30, 23], [35, 14], [44, 20]], [[13, 57], [18, 49], [10, 38], [18, 34], [18, 20], [28, 22], [36, 10], [42, 17]], [[13, 62], [15, 47], [7, 41], [18, 31], [14, 21], [29, 18], [31, 9], [45, 15]]];
+const MODES=[
+  {b:'D',name:'Dark',c:'#a03cff'},{b:'X',name:'Glitch',c:'#ff2bd6'},{b:'H',name:'Hunt',c:'#ff1e1e'},
+  {b:'h',name:'Heartbeat',c:'#ff5a5a'},{b:'M',name:'Matrix',c:'#22ff66'},{b:'R',name:'Rainbow',c:'linear-gradient(90deg,#f33,#ff3,#3f3,#3ff,#33f,#f3f)'},
+  {b:'P',name:'Peace out',c:'#ffffff'},{b:'A',name:'Audio',c:'linear-gradient(0deg,#00ff28,#ffc800,#ff0000)'}];
+const COL={purple:[160,60,255],mag:[255,43,214],cyan:[0,229,255],red:[255,30,30],green:[34,255,102],gh:[200,255,216],white:[255,255,255],off:[0,0,0]};
+const sc=(c,k)=>{k=Math.max(0,Math.min(1,k));return [c[0]*k,c[1]*k,c[2]*k];};
+const breath=t=>0.1+0.9*Math.pow(0.5-0.5*Math.cos(t*2*Math.PI/5.5),1.6);
+const heart=t=>{const p=t%1.05;return Math.exp(-Math.pow(p/0.055,2))+0.7*Math.exp(-Math.pow((p-0.24)/0.06,2));};
+const wheel=h=>{h=((h%1)+1)%1;const i=Math.floor(h*6),f=h*6-i,q=255*(1-f),u=255*f;
+  return [[255,u,0],[q,255,0],[0,255,u],[0,q,255],[u,0,255],[255,0,q]][i%6];};
+
+/* ---------- state ---------- */
+let mode='D', modeT0=performance.now()/1000, clue='idle', phaseT=0;
+const now=()=>performance.now()/1000;
+function busByte(){return clue==='takeover'?'F':(clue==='idle'?mode:mode);}
+
+/* ---------- fake party music for the mic (the page can't use a real mic) ---------- */
+function musicLevel(t){const beat=60/124,p=(t%beat)/beat,bar=(t/beat|0)%4;
+  const kick=Math.exp(-p*7),snare=(bar%2?0.75:0)*Math.exp(-p*9),hats=0.25+0.1*Math.sin(t*37)*Math.sin(t*5.3);
+  const swell=0.65+0.35*Math.sin(t*0.4);return Math.min(1,(Math.max(kick,snare)*0.8+hats*0.3)*swell+Math.random()*0.06);}
+const VU_L=[4,3,2,1,0],VU_R=[5,6,7,8,9],VU_C=[[0,255,40],[90,255,0],[255,200,0],[255,110,0],[255,0,0]];
+/* ---------- lens (port of leds.py) ---------- */
+function Lens(key){this.key=key;this.burst=0;this.cut=0;this.vu=0;this.peak=0;this.peakT=0;}
+Lens.prototype.vuFrame=function(t,dt){
+  const lvl=musicLevel(t);this.vu=lvl>this.vu?lvl:this.vu-(this.vu-lvl)*Math.min(1,dt*6);
+  const h=this.vu*5;if(h>=this.peak){this.peak=h;this.peakT=t;}else if(t-this.peakT>0.4)this.peak=Math.max(0,this.peak-dt*4);
+  const px=new Array(10);[VU_L,VU_R].forEach(side=>side.forEach((p,k)=>{
+    let c=h>=k+1?VU_C[k]:h>k?sc(VU_C[k],h-k):COL.off;
+    if((this.peak|0)===k&&this.peak>0.5&&h<k+1)c=k<4?COL.white:[255,60,60];px[p]=c;}));return px;};
+Lens.prototype.clock=function(dt){
+  if(this.cut>0)this.cut-=dt;else if(Math.random()<0.007*dt*50)this.cut=0.08+Math.random()*0.2;
+  if(this.burst>0)this.burst-=dt;else if(Math.random()<0.03*dt*50)this.burst=0.08+Math.random()*0.35;};
+Lens.prototype.px=function(i,t,m){
+  const N=10,key=this.key;
+  if(m==='D'||m==='I')return sc(COL.purple,breath(t-i/N*0.8));
+  if(m==='X'){if(this.cut>0)return COL.off;const r=Math.random();
+    if(this.burst>0)return r>0.3?(Math.random()>0.5?COL.mag:COL.cyan):COL.off;
+    return r>0.93?sc(COL.mag,0.85):sc(COL.cyan,0.22);}
+  if(m==='h')return sc(COL.red,0.06+0.94*heart(t));
+  if(m==='H'||m==='F'){const idx=key%2?N-1-i:i,pos=(t*N*0.45)%N;let d=Math.abs(idx-pos);d=Math.min(d,N-d);
+    let c=sc(COL.red,Math.pow(Math.max(0,1-d/(N*0.25)),2)*0.95+0.04);
+    if(m==='F'&&this.burst>0&&Math.random()>0.6)c=Math.random()>0.5?COL.mag:COL.white;return c;}
+  if(m==='M'){let d=(t*N*0.55+key*3.1)%N-i;if(d<0)d+=N;if(d<1)return COL.gh;
+    return sc(COL.green,d<N*0.5?Math.pow(1-d/(N*0.5),1.6):0.03);}
+  if(m==='R')return wheel(((i/N)*0.5+key*0.5)*0.3-t*0.06);
+  if(m==='P'){const f=t-modeT0;const k=f<0.4?f/0.4:f<1.6?1:Math.max(0,1-Math.pow((f-1.6)/4,0.8));return sc(COL.white,k);}
+  return COL.off;};
+
+/* ---------- Circuit Playground drawing ---------- */
+const PIXA=[60,30,0,-30,-60,-120,-150,180,150,120].map(d=>d*Math.PI/180);
+function drawCP(cv,lens,label,t,dt){
+  const g=cv.getContext('2d'),W=cv.width,cx=W/2,R=W*0.44;lens.clock(dt);
+  const m=busByte();let px=[];if(m==='A')px=lens.vuFrame(t,dt);else for(let i=0;i<10;i++)px.push(lens.px(i,t,m));
+  let ar=0,ag=0,ab=0;px.forEach(p=>{ar+=p[0];ag+=p[1];ab+=p[2];});
+  g.clearRect(0,0,W,W);
+  // lens glow on the bench
+  const glow=g.createRadialGradient(cx,cx,R*0.2,cx,cx,R*1.15);
+  glow.addColorStop(0,`rgba(${ar/10|0},${ag/10|0},${ab/10|0},.35)`);glow.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=glow;g.fillRect(0,0,W,W);
+  // board
+  g.fillStyle='#17151d';g.beginPath();g.arc(cx,cx,R,0,7);g.fill();
+  g.strokeStyle='rgba(255,255,255,.25)';g.lineWidth=2;g.beginPath();g.arc(cx,cx,R*0.8,0,7);g.stroke();
+  for(let i=0;i<14;i++){const a=i/14*Math.PI*2+Math.PI/14,x=cx+Math.cos(a)*R*0.89,y=cx+Math.sin(a)*R*0.89;
+    g.fillStyle='#c9a650';g.beginPath();g.arc(x,y,R*0.07,0,7);g.fill();g.fillStyle='#17151d';g.beginPath();g.arc(x,y,R*0.032,0,7);g.fill();}
+  g.fillStyle='#24212c';g.fillRect(cx-R*0.18,cx-R*0.18,R*0.36,R*0.36);
+  g.fillStyle='rgba(236,232,244,.55)';g.textAlign='center';g.font=`600 ${R*0.085|0}px "JetBrains Mono",monospace`;
+  g.fillText(label,cx,cx+R*0.42);
+  // pixels
+  PIXA.forEach((a,i)=>{const x=cx+Math.cos(a)*R*0.62,y=cx-Math.sin(a)*R*0.62,[r,gg,b]=px[i];
+    const bloom=g.createRadialGradient(x,y,0,x,y,R*0.32);bloom.addColorStop(0,`rgba(${r|0},${gg|0},${b|0},.9)`);bloom.addColorStop(1,'rgba(0,0,0,0)');
+    g.fillStyle=bloom;g.beginPath();g.arc(x,y,R*0.32,0,7);g.fill();
+    g.fillStyle=`rgb(${Math.max(40,r)|0},${Math.max(40,gg)|0},${Math.max(44,b)|0})`;
+    const s=R*0.12;g.fillRect(x-s/2,y-s/2,s,s);
+    g.fillStyle=`rgba(255,255,255,${(r+gg+b)/765*0.8})`;g.fillRect(x-s/4,y-s/4,s/2,s/2);});
+  // smoked acrylic
+  g.fillStyle='rgba(8,6,12,.18)';g.beginPath();g.arc(cx,cx,R*0.97,0,7);g.fill();
+  g.strokeStyle='rgba(255,255,255,.08)';g.lineWidth=R*0.04;g.beginPath();g.arc(cx,cx,R*0.95,3.6,4.6);g.stroke();
+  return [ar/10,ag/10,ab/10];
+}
+
+/* ---------- Octlet sprites ---------- */
+let SH=null,MN=null;
+function loadIdx(src,cb){const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=im.width;c.height=im.height;
+  const g=c.getContext('2d');g.drawImage(im,0,0);const d=g.getImageData(0,0,c.width,c.height).data,a=new Uint8Array(c.width*c.height);
+  for(let i=0;i<a.length;i++){const r=d[i*4],gg=d[i*4+1],b=d[i*4+2];
+    a[i]=(r<10&&gg<10&&b<10)?0:(r>200&&gg>200)?2:(b>120&&r<60&&gg<80)?3:1;}
+  cb({w:c.width,h:c.height,a});};im.src=src;}
+loadIdx(SHEET,s=>SH=s);loadIdx(MINI,s=>MN=s);
+const PAL={idle:['#6e00b4','#f0f0ff','#3c0078','#00e6ff'],glitch:['#ff008c','#f0f0ff','#00e6ff','#00e6ff'],
+  hunt:['#dc0014','#ffc8c8','#5a0000','#ffc8c8'],matrix:['#1fbf55','#e6ffe9','#064d1c','#c8ffd8'],
+  rainbow:null,peace:['#d8d6e6','#ffffff','#5c5a70','#ffffff'],brand:['#00c8d2','#f0f0ff','#1428a0','#ffffff']};
+function palFor(t){
+  if(clue!=='idle')return PAL.hunt;
+  return {D:PAL.idle,X:PAL.glitch,H:PAL.hunt,h:PAL.hunt,M:PAL.matrix,P:PAL.peace,A:PAL.matrix,R:null}[mode]||
+    ['hsl('+((t*22)%360)+' 90% 55%)','#f0f0ff','hsl('+((t*22+180)%360)+' 80% 30%)','#ffffff'];}
+function drawSprite(g,S,frame,fw,x,y,s,pal,byte,pads){
+  if(!S)return;
+  for(let yy=0;yy<fw;yy++)for(let xx=0;xx<fw;xx++){
+    let v=S.a[yy*S.w+frame*fw+xx];if(!v)continue;g.fillStyle=pal[v-1];g.fillRect(x+xx*s,y+yy*s,s,s);}
+  if(pads&&byte!=null){g.fillStyle=pal[3];
+    pads[frame].forEach(([px,py],i)=>{if((byte>>(7-i))&1)g.fillRect(x+(px-1)*s,y+(py-1)*s,2*s,2*s);});}
+}
+
+/* ---------- CLUE screen ---------- */
+const scr=document.getElementById('clueScreen'),sg=scr.getContext('2d');
+const IDLE_TEXT=["> sync goggles ...... OK","> netrunner.daemon up","> scan 2.4GHz ch{n}","> mem 0x{x} clean","> octlet bus {b}",
+  "> heartbeat {n} bpm","> ICE layer nominal","> uplink steamworkz.net","> cyberware temp {n}C"];
+const VIRUS_TEXT=["!! octlet.exe REPLICATING","!! ICE BREACHED","!! write 0x{x} DENIED","!! process {n} hijacked",
+  "!! you are not in control","!! 8 legs // 1 byte","!! uplink REROUTED","!! kernel {b}","!! RESISTANCE IS 0x00"];
+const GLITCH="#%&@$!?/\\|<>=+*";
+const fill=s=>s.replace('{n}',1+Math.random()*98|0).replace('{x}',(Math.random()*65535|0).toString(16).toUpperCase().padStart(4,'0'))
+  .replace('{b}',(Math.random()*256|0).toString(2).padStart(8,'0'));
+const lines=Array.from({length:12},()=>({t:'',c:'#6e00b4'}));
+function push(t,c){lines.shift();lines.push({t:t.slice(0,38),c});}
+function glitchLines(n){for(let k=0;k<n;k++){const ln=lines[Math.random()*12|0];const s=(ln.t||'                    ').split('');
+  for(let j=0;j<4;j++)s[Math.random()*s.length|0]=GLITCH[Math.random()*GLITCH.length|0];ln.t=s.join('');ln.c='#dc0014';}}
+const termColor=t=>({D:'#7d2be0',X:Math.random()>0.5?'#ff2bd6':'#00e5ff',H:'#e0202a',h:'#e0202a',M:'#22ff66',P:'#d8d6e6',A:'#ffc800'}[mode]
+  ||'hsl('+((t*40)%360)+' 90% 62%)');
+const swarm=Array.from({length:8},()=>({on:false,x:0,y:0,vx:0,vy:0}));
+function spawn(i){const m=swarm[i],s=Math.random()*4|0;
+  [[m.x,m.y]]=[[[Math.random()*104,-16],[120,Math.random()*104],[Math.random()*104,120],[-16,Math.random()*104]][s]];
+  m.vx=(Math.random()-0.5)*3+(52-m.x)*0.02;m.vy=(Math.random()-0.5)*3+(52-m.y)*0.02;m.on=true;}
+let tick=0,legByte=0x44,iconBig=true,splashUntil=now()+1.6;
+push('> STEAMWORKZ CYBERWARE v2.0.77','#00e5ff');
+function stepClue(t){
+  tick++;const el=t-phaseT;
+  if(clue==='idle'){
+    if(t<splashUntil){iconBig=true;}else iconBig=false;
+    if(tick%6===0)push(fill(IDLE_TEXT[Math.random()*IDLE_TEXT.length|0]),termColor(t));
+    legByte=mode.charCodeAt(0);
+  }else if(clue==='infect'){
+    if(tick%4===0)push(fill(IDLE_TEXT[Math.random()*IDLE_TEXT.length|0]),'#6e00b4');
+    if(tick%3===0)glitchLines(1);
+    if(el>2){clue='spread';phaseT=t;}
+  }else if(clue==='spread'){
+    const n=Math.min(8,1+(el*2.5|0));
+    for(let i=0;i<n;i++)if(!swarm[i].on){spawn(i);push('!! octlet.exe x'+(i+1),'#dc0014');}
+    legByte=(0xFF00>>n)&0xFF;if(tick%2===0)glitchLines(2);
+    if(el>3.2){clue='dive';phaseT=t;}
+  }else if(clue==='dive'){
+    if(el>0.8){swarm.forEach(m=>m.on=false);iconBig=true;clue='takeover';phaseT=t;
+      for(let k=0;k<12;k++)push(fill(VIRUS_TEXT[Math.random()*VIRUS_TEXT.length|0]),'#dc0014');updateBus();}
+  }else if(clue==='takeover'){
+    if(tick%3===0)legByte=Math.random()*256|0;
+    if(tick%5===0)push(fill(VIRUS_TEXT[Math.random()*VIRUS_TEXT.length|0]),tick%10?'#dc0014':'#ff008c');
+  }
+  // swarm motion
+  swarm.forEach(m=>{if(!m.on)return;
+    if(clue==='dive'){m.vx+=(52-m.x)*0.08;m.vy+=(52-m.y)*0.08;m.vx*=0.7;m.vy*=0.7;}
+    else{m.vx=Math.max(-2,Math.min(2,m.vx+(Math.random()-0.5)*0.8));m.vy=Math.max(-2,Math.min(2,m.vy+(Math.random()-0.5)*0.8));
+      if(m.x<0||m.x>104)m.vx=-m.vx;if(m.y<0||m.y>104)m.vy=-m.vy;}
+    m.x+=m.vx;m.y+=m.vy;});
+}
+function drawClue(t){
+  sg.fillStyle='#000';sg.fillRect(0,0,240,240);
+  sg.font='600 11px "JetBrains Mono",monospace';sg.textBaseline='top';
+  lines.forEach((l,i)=>{sg.fillStyle=l.c;sg.fillText(l.t,4,4+i*19);});
+  const pal=t<splashUntil&&clue==='idle'?PAL.brand:palFor(t);
+  const LOOK=[0,1,0,4,0,2,0,5],REACH=[6,7,3,7];
+  let fr;
+  if(clue==='takeover')fr=REACH[(tick>>1)%4];
+  else if(clue!=='idle')fr=3;
+  else fr=LOOK[(tick/3|0)%8];
+  if(iconBig){const jx=clue==='takeover'&&Math.random()<0.08?(Math.random()*12-6|0):0;
+    sg.fillStyle='rgba(0,0,0,.45)';sg.fillRect(0,0,240,240);
+    drawSprite(sg,SH,fr,64,24+jx,24,3,pal,legByte,PADS);}
+  else drawSprite(sg,SH,fr,64,240-68,4,1,pal,legByte,PADS);
+  if(mode==='A'&&clue==='idle'){const lv=musicLevel(t);for(let i=0;i<16;i++){const h=Math.max(2,(lv*(0.6+0.4*Math.sin(i*1.7+t*9)))*60|0);
+    for(let y=0;y<h;y+=4){const f=y/60;sg.fillStyle=f<0.45?'#00ff28':f<0.75?'#ffc800':'#ff0000';sg.fillRect(8+i*14,236-y,11,3);}}}
+  swarm.forEach(m=>{if(m.on)drawSprite(sg,MN,(tick>>1)&1,16,m.x*2|0,m.y*2|0,2,PAL.hunt,null,null);});
+}
+
+/* ---------- UI ---------- */
+const chips=document.getElementById('chips');
+MODES.forEach(m=>{const b=document.createElement('button');b.className='chip';b.id='mode-'+m.name.replace(/\s/g,'');
+  b.dataset.b=m.b;b.setAttribute('aria-pressed',String(m.b===mode));b.innerHTML=`<i style="--c:${m.c};background:${m.c}"></i>${m.name}`;
+  b.addEventListener('click',()=>setMode(m.b));chips.appendChild(b);});
+function setMode(b){if(clue!=='idle')purge();mode=b;modeT0=now();
+  chips.querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed',String(c.dataset.b===b)));updateBus();}
+const vBtn=document.getElementById('btnVirus'),pBtn=document.getElementById('btnPurge');
+function release(){if(clue!=='idle')return;clue='infect';phaseT=now();splashUntil=0;iconBig=false;
+  push('!! UNKNOWN PROCESS: octlet.exe','#dc0014');spawn(0);vBtn.disabled=true;pBtn.disabled=false;updateBus();}
+function purge(){if(clue==='idle')return;clue='idle';swarm.forEach(m=>m.on=false);iconBig=false;
+  push('> purge complete. octlet.exe contained','#00e5ff');vBtn.disabled=false;pBtn.disabled=true;updateBus();}
+vBtn.addEventListener('click',release);pBtn.addEventListener('click',purge);
+document.getElementById('hwA').addEventListener('click',release);
+document.getElementById('hwB').addEventListener('click',purge);
+const bitsEl=document.getElementById('bits');for(let i=0;i<8;i++)bitsEl.appendChild(document.createElement('span'));
+function updateBus(){const c=busByte(),v=c.charCodeAt(0);
+  document.getElementById('byteChar').textContent=c;document.getElementById('byteHex').textContent='0x'+v.toString(16).toUpperCase();
+  [...bitsEl.children].forEach((s,i)=>s.classList.toggle('on',!!((v>>(7-i))&1)));
+  document.getElementById('clueState').textContent=clue==='idle'?'idle':clue==='takeover'?'takeover':'infecting ('+clue+')';}
+updateBus();
+
+/* ---------- loop ---------- */
+const L=new Lens(0),Rl=new Lens(1),cL=document.getElementById('cpL'),cR=document.getElementById('cpR');
+const clueEl=document.getElementById('clue'),wire=document.getElementById('wireGlow');
+let last=now(),acc=0,dash=0;
+function frame(){
+  const t=reduce?modeT0+1.2:now(),dt=Math.min(0.05,t-last);last=t;
+  acc+=dt;while(acc>=0.05){stepClue(t);acc-=0.05;}
+  const a=drawCP(cL,L,'BLUEFRUIT',t,dt),b=drawCP(cR,Rl,'EXPRESS',t,dt);
+  drawClue(t);
+  const r=(a[0]+b[0])/2|0,g=(a[1]+b[1])/2|0,bl=(a[2]+b[2])/2|0;
+  clueEl.style.setProperty('--glow',`rgb(${r},${g},${bl})`);
+  wire.setAttribute('stroke',`rgb(${Math.max(60,r)},${Math.max(30,g)},${Math.max(60,bl)})`);
+  if(!reduce){dash=(dash-dt*30)%10;wire.setAttribute('stroke-dashoffset',dash);}
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>

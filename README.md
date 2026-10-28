@@ -14,6 +14,10 @@ takes its reports back, so presses on the watch, the random hack and pad-0 stand
 all show up on the phone. The hat and BOLT follow the rig's look or show their own
 content from their tabs. Every device keeps animating on its own if a link drops.
 
+**Rig visualizers:** design-time sims and renders of the rig (rig sim, 3D headgear
+configurator, respirator concept, Byte vs BUG.EXE) live in `public/viz/` and are served at
+`https://<user>.github.io/cyber-rig-controller/viz/`.
+
 ## Tabs
 
 | Tab | What it does |

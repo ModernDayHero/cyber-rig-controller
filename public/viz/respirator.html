@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lit Cartridge Respirator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Concept board for the lit-cartridge respirator, converted from its Claude design canvas.
+   Single dark theme on purpose: it's a light show. */
+:root { --bg: #0A0A0C; --ink: #E8E8EE; --dim: #A0A0AC; --line: #2A2A32; --accent: #7A2BFF; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+a { color: #00E5FF; } a:hover { color: #7FF2FF; }
+.page { max-width: 1280px; margin: 0 auto; padding: 48px max(16px, 4vw); display: flex; flex-wrap: wrap; gap: 56px; }
+.left { flex: 1 1 520px; max-width: 640px; display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.right { flex: 1 1 360px; display: flex; flex-direction: column; gap: 16px; padding-top: 8px; min-width: 0; }
+.eyebrow { font-size: 13px; letter-spacing: 3px; color: var(--dim); }
+h1 { margin: 0; font-family: Rajdhani, 'Arial Narrow', sans-serif; font-weight: 700; font-size: clamp(32px, 6vw, 44px); letter-spacing: 1px; }
+svg { width: 100%; height: auto; display: block; }
+.modes { display: flex; flex-wrap: wrap; gap: 10px; }
+.modes button { min-height: 44px; padding: 0 16px; display: flex; align-items: center; gap: 10px; background: #141418; color: var(--ink);
+  border: 2px solid var(--line); border-radius: 22px; font: 14px 'IBM Plex Mono', ui-monospace, monospace; cursor: pointer; }
+.modes button[aria-pressed="true"] { border-color: var(--ink); }
+.modes button:focus-visible { outline: 2px solid #00E5FF; outline-offset: 2px; }
+.modes .sw { width: 16px; height: 16px; border-radius: 8px; }
+.steps { display: flex; flex-direction: column; gap: 10px; }
+.step { display: flex; gap: 16px; align-items: flex-start; }
+.num { width: 36px; height: 36px; flex: none; border: 2px solid #3A3A44; border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.step b { display: block; font-family: Rajdhani, 'Arial Narrow', sans-serif; font-weight: 700; font-size: 22px; }
+.step span, .muted { font-size: 14px; color: var(--dim); line-height: 1.5; }
+.nose { border-top: 1px solid var(--line); padding-top: 16px; display: flex; flex-direction: column; gap: 4px; }
+.mode { margin-top: auto; border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 6px; }
+.mode b { font-family: Rajdhani, 'Arial Narrow', sans-serif; font-weight: 700; font-size: 20px; color: var(--accent); }
+</style>
+</head>
+<body>
+<main class="page">
+  <div class="left">
+    <div>
+      <div class="eyebrow">CONCEPT 01 · FRONT VIEW</div>
+      <h1>Lit cartridge respirator</h1>
+    </div>
+
+    <svg viewBox="0 0 640 560" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Black half-mask respirator with glowing light pods in place of filter cartridges">
+      <defs>
+        <filter id="halo" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="22"/></filter>
+        <filter id="soft" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="7"/></filter>
+        <filter id="dot" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="3.2"/></filter>
+        <radialGradient id="dome" cx="38%" cy="32%" r="70%"><stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22"/><stop offset="55%" stop-color="#FFFFFF" stop-opacity="0.04"/><stop offset="100%" stop-color="#000000" stop-opacity="0.35"/></radialGradient>
+        <linearGradient id="sil" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#26262C"/><stop offset="100%" stop-color="#121215"/></linearGradient>
+      </defs>
+      <!-- head in balaclava -->
+      <ellipse cx="320" cy="250" rx="205" ry="300" fill="#131317"/>
+      <rect x="190" y="118" width="260" height="58" rx="29" fill="#1C1C22"/>
+      <ellipse cx="262" cy="147" rx="26" ry="9" fill="#0A0A0C"/>
+      <ellipse cx="378" cy="147" rx="26" ry="9" fill="#0A0A0C"/>
+      <!-- harness straps -->
+      <path d="M175 300 C 140 290, 120 270, 115 250" stroke="#1E1E24" stroke-width="16" fill="none" stroke-linecap="round"/>
+      <path d="M465 300 C 500 290, 520 270, 525 250" stroke="#1E1E24" stroke-width="16" fill="none" stroke-linecap="round"/>
+      <path d="M190 420 C 150 425, 125 410, 112 395" stroke="#1E1E24" stroke-width="14" fill="none" stroke-linecap="round"/>
+      <path d="M450 420 C 490 425, 515 410, 528 395" stroke="#1E1E24" stroke-width="14" fill="none" stroke-linecap="round"/>
+      <!-- outer halos -->
+      <circle id="lHalo" cx="200" cy="372" r="92" opacity="0.32" filter="url(#halo)"/>
+      <circle id="rHalo" cx="440" cy="372" r="92" opacity="0.32" filter="url(#halo)"/>
+      <!-- mask body -->
+      <path d="M320 192 C 352 192, 372 214, 388 246 C 430 268, 468 304, 472 360 C 476 430, 410 492, 320 504 C 230 492, 164 430, 168 360 C 172 304, 210 268, 252 246 C 268 214, 288 192, 320 192 Z" fill="url(#sil)" stroke="#2E2E36" stroke-width="2"/>
+      <path d="M320 204 L 320 300" stroke="#2C2C34" stroke-width="3" fill="none"/>
+      <path d="M276 258 C 262 300, 262 360, 286 420" stroke="#24242B" stroke-width="3" fill="none"/>
+      <path d="M364 258 C 378 300, 378 360, 354 420" stroke="#24242B" stroke-width="3" fill="none"/>
+      <!-- exhale valve -->
+      <circle cx="320" cy="446" r="34" fill="#18181D" stroke="#33333C" stroke-width="3"/>
+      <path d="M298 436 H342 M296 446 H344 M298 456 H342" stroke="#2C2C34" stroke-width="4" stroke-linecap="round"/>
+      <!-- nose: CLUE display pod -->
+      <rect x="272" y="250" width="96" height="84" rx="10" fill="#141418" stroke="#2C2C34" stroke-width="3"/>
+      <rect x="286" y="258" width="68" height="68" rx="3" fill="#050507"/>
+      <rect id="screenTint" x="286" y="258" width="68" height="68" rx="3" opacity="0.07"/>
+      <g id="screen" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="6.4">
+        <text id="sStatus" x="290" y="267" font-weight="500"></text>
+        <text id="sHr" x="290" y="277"></text>
+        <text id="sO2" x="322" y="277"></text>
+        <text id="sBr" x="290" y="286"></text>
+        <text id="sT" x="322" y="286"></text>
+        <path id="sTrace" d="M290 295 L300 295 L303 289 L307 301 L311 293 L315 295 L350 295" stroke-width="1.2" fill="none"/>
+        <text id="sC1" x="290" y="306" opacity="0.6"></text>
+        <text id="sC2" x="290" y="313" opacity="0.6"></text>
+        <text id="sC3" x="290" y="320" opacity="0.6"></text>
+      </g>
+      <g id="lPod" transform="translate(200 372)"></g>
+      <g id="rPod" transform="translate(440 372)"></g>
+    </svg>
+
+    <div class="modes" id="modes"></div>
+  </div>
+
+  <div class="right">
+    <div class="eyebrow">LIGHT POD STACK · SKIN SIDE → OUT</div>
+    <div class="steps">
+      <div class="step"><div class="num">1</div><div><b>Mask cartridge port</b><span>Inhale valve stays in place, so breath goes out the center valve, not through the pods.</span></div></div>
+      <div class="step"><div class="num">2</div><div><b>Printed adapter ring</b><span>Matte black, matches the port. Four side slots let air in around the board.</span></div></div>
+      <div class="step"><div class="num">3</div><div><b>Sealed back plate</b><span>Thin plate behind the board keeps moisture off the electronics.</span></div></div>
+      <div class="step"><div class="num">4</div><div><b>Circuit Playground</b><span>10-LED ring per side. Mic can make the pods pulse when you talk.</span></div></div>
+      <div class="step"><div class="num">5</div><div><b>Diffuser dome</b><span>White or translucent print, set a few mm off the LEDs to blend the dots.</span></div></div>
+    </div>
+    <div class="nose">
+      <div class="eyebrow">NOSE · ADAFRUIT CLUE</div>
+      <div class="muted">Screen mounts on the nose bridge, clear of the exhale valve below. Shows mock vitals and scrolling code, tinted to the mode.</div>
+    </div>
+    <div class="mode">
+      <b id="modeName"></b>
+      <div class="muted" id="modeNote"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+(() => {
+  const P = '#7A2BFF', M = '#FF1FA8', C = '#00E5FF', R = '#FF2A1A', G = '#00FF5A', Gd = '#0B6B2E', W = '#E6E6F0';
+  const fill = (c) => Array(10).fill(c);
+  const rainbow = (off) => [...Array(10).keys()].map((i) => `hsl(${(i * 36 + off) % 360}, 100%, 58%)`);
+  const MODES = {
+    dark:    { name: 'Dark', l: fill(P), r: fill(P), lg: P, rg: P, swatch: P, note: 'Purple, slow breathing at low brightness. The default.' },
+    glitch:  { name: 'Glitch', l: [M, M, M, C, M, M, M, C, M, M], r: [C, C, M, C, C, C, C, C, M, C], lg: M, rg: C, accent: M,
+               swatch: `linear-gradient(135deg, ${M} 50%, ${C} 50%)`, note: 'Magenta left, cyan right, random bursts and swapped pixels.' },
+    hunt:    { name: 'Hunt', l: fill(R), r: fill(R), lg: R, rg: R, swatch: R, note: 'Red, scanner sweep around the rings or a heartbeat pulse.' },
+    matrix:  { name: 'Matrix', l: [G, Gd, G, Gd, G, Gd, G, Gd, G, Gd], r: [Gd, G, Gd, G, Gd, G, Gd, G, Gd, G], lg: G, rg: G, swatch: G, note: 'Green, pixels drip around the ring like digital rain.' },
+    rainbow: { name: 'Rainbow', l: rainbow(0), r: rainbow(180), lg: '#FF4FD8', rg: '#3FD0FF',
+               swatch: 'linear-gradient(90deg, #FF3B3B, #FFD23B, #3BFF6B, #3BC8FF, #B03BFF)', note: 'Hue wave flowing left pod to right pod.' },
+    peace:   { name: 'Peace out', l: fill(W), r: fill(W), lg: W, rg: W, swatch: W, note: 'Soft white, then fade to off. Doubles as power-down.' },
+  };
+  const SCREENS = {
+    dark:    { s: 'SYS IDLE',    hr: '072', o2: '98%', br: '14', t: '36.6', c: ['> standby()', '  pulse.slow', '  wait 0x00'] },
+    glitch:  { s: 'ERR 0x1F',    hr: '1?8', o2: '#!%', br: '--', t: '??.?', c: ['> segfault', '  0xDEADBEEF', '  retry...'] },
+    hunt:    { s: 'TARGET LOCK', hr: '128', o2: '97%', br: '22', t: '37.2', c: ['> scan(360)', '  lock: true', '  track #07'] },
+    matrix:  { s: '1010101',     hr: '064', o2: '99%', br: '12', t: '36.5', c: ['01101001 01', '10010110 10', '01011010 01'] },
+    rainbow: { s: 'SYNC ALL',    hr: '090', o2: '98%', br: '16', t: '36.8', c: ['> hue += 36', '  wave L>R', '  sync ok'] },
+    peace:   { s: 'SHUTDOWN',    hr: '060', o2: '98%', br: '10', t: '36.4', c: ['> fade(out)', '  save state', '  bye.'] },
+  };
+  const $ = (id) => document.getElementById(id);
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+
+  // Each pod: housing, four notches, glow, a ring of 10 LEDs, glass dome on top.
+  function buildPod(g) {
+    g.append(el('circle', { r: 70, fill: '#141418', stroke: '#2C2C34', 'stroke-width': 3 }));
+    for (const [x, y, w, h] of [[-6, -72, 12, 10], [-6, 62, 12, 10], [-72, -6, 10, 12], [62, -6, 10, 12]])
+      g.append(el('rect', { x, y, width: w, height: h, rx: 2, fill: '#0A0A0C' }));
+    g.append(el('circle', { r: 58, fill: '#0E0E12' }));
+    const glowA = el('circle', { r: 56, opacity: 0.2 }), glowB = el('circle', { r: 40, opacity: 0.55, filter: 'url(#soft)' });
+    g.append(glowA, glowB);
+    const leds = [...Array(10).keys()].map((i) => {
+      const a = (i * 36 - 90) * Math.PI / 180;
+      const c = el('circle', { cx: (40 * Math.cos(a)).toFixed(1), cy: (40 * Math.sin(a)).toFixed(1), r: 6, filter: 'url(#dot)' });
+      g.append(c);
+      return c;
+    });
+    g.append(el('circle', { r: 58, fill: 'url(#dome)' }));
+    return { glows: [glowA, glowB], leds };
+  }
+  const pods = { l: buildPod($('lPod')), r: buildPod($('rPod')) };
+
+  const buttons = Object.entries(MODES).map(([id, m]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.innerHTML = `<span class="sw" style="background:${m.swatch}"></span><span>${m.name}</span>`;
+    b.addEventListener('click', () => setMode(id));
+    $('modes').append(b);
+    return [id, b];
+  });
+
+  function setMode(id) {
+    const m = MODES[id], s = SCREENS[id], accent = m.accent || m.lg;
+    for (const side of ['l', 'r']) {
+      pods[side].glows.forEach((g) => g.setAttribute('fill', m[side + 'g']));
+      pods[side].leds.forEach((c, i) => c.setAttribute('fill', m[side][i]));
+    }
+    $('lHalo').setAttribute('fill', m.lg);
+    $('rHalo').setAttribute('fill', m.rg);
+    $('screenTint').setAttribute('fill', accent);
+    $('screen').setAttribute('fill', accent);
+    $('sTrace').setAttribute('stroke', accent);
+    $('sStatus').textContent = s.s;
+    $('sHr').textContent = `HR  ${s.hr}`; $('sO2').textContent = `O2 ${s.o2}`;
+    $('sBr').textContent = `BR  ${s.br}`; $('sT').textContent = `T ${s.t}`;
+    [$('sC1'), $('sC2'), $('sC3')].forEach((t, i) => { t.textContent = s.c[i]; });
+    document.documentElement.style.setProperty('--accent', accent);
+    $('modeName').textContent = `Mode: ${m.name}`;
+    $('modeNote').textContent = m.note;
+    buttons.forEach(([k, b]) => b.setAttribute('aria-pressed', String(k === id)));
+  }
+  setMode('dark');
+})();
+</script>
+</body>
+</html>

@@ -32,6 +32,9 @@ export default defineConfig({
         // offline (and never hits a login redirect) once installed.
         globPatterns: ['**/*.{js,css,html,png,svg,webmanifest}'],
         navigateFallback: `${base}index.html`,
+        // The rig visualizers are separate pages: not precached, never answered with the app.
+        globIgnores: ['viz/**'],
+        navigateFallbackDenylist: [/\/viz\//],
       },
     }),
   ],
