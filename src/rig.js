@@ -136,8 +136,8 @@ export class Rig extends EventTarget {
     if (!this.bolt.connected) return;
     const b = this.state.bolt;
     const lk = look(this.state);
-    // Standby / off always wins, so the whole rig goes dark together.
-    if (b.follow || !lk.on) {
+    // Standby / off always wins, so the whole rig goes dark together; an egg takes over too.
+    if (b.follow || !lk.on || this.state.egg) {
       this.bolt.applyState({ ...this.state, brightness: b.brightness, look: lk });
     } else {
       const c = b.content.type === 'image' && this.boltImage ? { type: 'image', anim: this.boltImage } : b.content;
@@ -148,7 +148,7 @@ export class Rig extends EventTarget {
   pushCap() {
     if (!this.cap.available) return;      // the hat connects on demand
     const h = this.state.hat, lk = look(this.state);
-    if (h.follow || !lk.on || !this.hatImage) {
+    if (h.follow || !lk.on || !this.hatImage || this.state.egg) {
       this.cap.applyState({ ...this.state, look: lk });
     } else {
       this.cap.showFrames(this.hatImage, { ms: h.ms, effect: h.effect, speed: 0 },
@@ -280,15 +280,29 @@ export class Rig extends EventTarget {
     if (on) this.bolt.stabilize();
   }
 
-  /** /boo, /pumpkin, /secret: the CLUE runs the mask + its screen; the hat and BOLT
-   *  show the egg's look for the same time, then follow the rig again. */
+  /** /boo, /pumpkin, /secret: the CLUE runs the mask + its screen. The hat and BOLT
+   *  show the command first, then the egg's look, for the same time (taking over
+   *  OWN content too), then go back to what they were showing. */
   egg(name) {
     const e = EGGS[name];
     this.clue.send(cmd.egg(name));
     if (!e.look) return;
-    this._update({ egg: e.look });
+    const title = '/' + name.toUpperCase();
+    this.state.egg = e.look;                 // not saved: it only lasts e.ms
     clearTimeout(this._eggTimer);
-    this._eggTimer = setTimeout(() => this._update({ egg: null }), e.ms);
+    this._eggTimer = setTimeout(() => {
+      this.state.egg = null;
+      this.pushCap();
+      this.pushBolt();
+    }, e.ms);
+    const still = () => this.state.egg === e.look;
+    if (this.bolt.connected) {
+      this.bolt.scrollText(title, e.rgb, 12, this.state.bolt.brightness)
+        .then(() => setTimeout(() => still() && this.pushBolt(), 2500));
+    }
+    if (this.cap.available) {                // the title holds while the look uploads
+      this.cap.showTitle(title, e.rgb).then(() => setTimeout(() => still() && this.pushCap(), 1000));
+    }
   }
 
   /** Reconnect devices Chrome already granted, without a picker. */

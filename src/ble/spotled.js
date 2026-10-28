@@ -187,7 +187,10 @@ const FONT = {
   C: ['###', '#..', '#..', '#..', '###'], D: ['##.', '#.#', '#.#', '#.#', '##.'],
   E: ['###', '#..', '##.', '#..', '###'], F: ['###', '#..', '##.', '#..', '#..'],
   I: ['###', '.#.', '.#.', '.#.', '###'], L: ['#..', '#..', '#..', '#..', '###'],
-  N: ['##.', '#.#', '#.#', '#.#', '#.#'],
+  N: ['##.', '#.#', '#.#', '#.#', '#.#'], P: ['##.', '#.#', '##.', '#..', '#..'],
+  M: ['#.#', '###', '###', '#.#', '#.#'], K: ['#.#', '#.#', '##.', '#.#', '#.#'],
+  H: ['#.#', '#.#', '###', '#.#', '#.#'], G: ['###', '#..', '#.#', '#.#', '###'],
+  '/': ['..#', '..#', '.#.', '#..', '#..'],
   O: ['###', '#.#', '#.#', '#.#', '###'], R: ['##.', '#.#', '##.', '#.#', '#.#'],
   S: ['###', '#..', '###', '..#', '###'], T: ['###', '.#.', '.#.', '.#.', '.#.'],
   U: ['#.#', '#.#', '#.#', '#.#', '###'], V: ['#.#', '#.#', '#.#', '#.#', '.#.'],
@@ -691,6 +694,20 @@ export class SpotLed extends RigDevice {
   clear() {
     const { width: w, height: h } = this.info;
     return this.showFrames([{ px: new Uint8Array(w * h) }], {}, 'off');
+  }
+
+  /** A title card, e.g. the slash command before its animation: the text centred,
+   *  with a glitch tear now and then. Three frames, so it's up in about a second. */
+  async showTitle(text, color) {
+    const { width: w, height: h } = this.info;
+    const tw = text.length * 4 - 1, x = Math.max(0, Math.round((w - tw) / 2)), y = Math.round((h - 5) / 2);
+    const frames = [0, 1, 0].map((tear) => {
+      const cv = canvas(w, h);
+      drawText(cv, text, x, y, color);
+      if (tear) cv.rowShift(y + 2, 2);
+      return cv.frame();
+    });
+    await this.showFrames(frames, { ms: 250 }, JSON.stringify(['title', text, color]));
   }
 
   /** Follow the rig: the look's animation at the hat's brightness. */

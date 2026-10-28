@@ -127,7 +127,12 @@ export const cmd = {
 // Slash commands typed in the INCOMING box. Eggs: look key the hat / BOLT show
 // meanwhile (null = no picture), for as long as the CLUE runs them.
 // 20 s, same as the CLUE's EGG_TIME: the hat needs a few seconds to upload before it shows.
-export const EGGS = { boo: { look: 'G', ms: 20000 }, pumpkin: { look: 'J', ms: 20000 }, secret: { look: null, ms: 3000 } };
+// The hat and BOLT show the command (in rgb) first, then the look, whatever they were on.
+export const EGGS = {
+  boo: { look: 'G', ms: 20000, rgb: [150, 160, 200] },
+  pumpkin: { look: 'J', ms: 20000, rgb: [255, 80, 0] },
+  secret: { look: null, ms: 3000 },
+};
 
 export const modeOf = (s) => SETS[s.set].modes[s.idx[s.set]];
 
@@ -137,7 +142,7 @@ export const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 /** What the cap and BOLT should show for the current rig state: one key + colour. */
 export function look(s) {
   if (s.power === POWER.OFF || s.power === POWER.STANDBY) return { key: s.power, rgb: [0, 0, 0], on: false };
-  if (s.egg) return { key: s.egg, rgb: s.egg === 'G' ? [150, 160, 200] : [255, 80, 0], on: true };
+  if (s.egg) return { key: s.egg, rgb: Object.values(EGGS).find((e) => e.look === s.egg).rgb, on: true };
   if (s.hacked) return { key: 'hack', rgb: [255, 30, 30], on: true };
   const m = modeOf(s);
   const c = m.breathe ? s.pair[0] : rgb(m.color);
