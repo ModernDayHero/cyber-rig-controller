@@ -1,6 +1,6 @@
 // Sphero BOLT over the Sphero v2 BLE API, ported from the `spherov2` Python library
-// (controls/v2.py Packet, commands/io.py, sphero_edu.register_matrix_animation).
-// Worn in the carrier: LED commands only, never drive.
+// (controls/v2.py Packet, commands/io.py, commands/drive.py, sphero_edu.register_matrix_animation).
+// Worn in the carrier it only shows LEDs; out of it, the BOLT tab's DRIVE panel drives it.
 //
 // Each rig look is an 8x8 animation (palette + frames) uploaded once and then looped
 // by the BOLT itself, so nothing streams while it plays.
@@ -22,6 +22,7 @@ const SOURCE = 0x01;
 const POWER = 0x13, POWER_WAKE = 0x0d;
 const IO = 0x1a;
 const SENSOR = 0x18, SENSOR_COLLISION_CONFIG = 17, SENSOR_COLLISION_NOTIFY = 18;
+const DRIVE = 0x16, DRIVE_RESET_YAW = 6, DRIVE_WITH_HEADING = 7, DRIVE_STABILIZATION = 12;
 const CID = {
   oneColor: 47,         // set_compressed_frame_player_one_color
   scrollText: 59,       // set_compressed_frame_player_text_scrolling
@@ -78,7 +79,8 @@ const rnd = (seed) => () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) /
 
 const PURPLE = [160, 60, 255], MAG = [255, 43, 214], CYAN = [0, 229, 255];
 const RED = [255, 30, 30], GREEN = [34, 255, 102], GREEN_HEAD = [200, 255, 216], WHITE = [255, 255, 255];
-const BASE = { PURPLE, MAG, CYAN, RED, GREEN };
+const BASE = { PURPLE, MAG, CYAN, RED, GREEN, WHITE };
+const HEART = ['.##..##.', '########', '########', '.######.', '..####..', '...##...', '........', '........'];
 const dim = (c, k) => c.map((v) => Math.round(v * k));
 
 function wheel(h) {
@@ -89,12 +91,27 @@ function wheel(h) {
 
 /** {palette: [[r,g,b]...] (<=16), frames: [8x8 grids], fps, fade} for a rig look. */
 export function lookAnimation(look, s) {
-  const { PURPLE, MAG, CYAN, RED, GREEN } = lookPalette(s, look.key, BASE);   // tuned colours
+  const { PURPLE, MAG, CYAN, RED, GREEN, WHITE } = lookPalette(s, look.key, BASE);   // tuned colours
   const GREEN_HEAD_T = GREEN === BASE.GREEN ? GREEN_HEAD : GREEN.map((v) => Math.min(255, (v >> 1) + 128));
   const r = rnd(4821);
   switch (look.key) {
-    case 'D': // purple breathing: two frames, faded
-      return { palette: [dim(PURPLE, 0.12), PURPLE], frames: [grid(() => 0), grid(() => 1)], fps: 1, fade: true };
+    case 'D': { // dark purple, a brighter arc circling the edge (like the mask)
+      const ring = [];
+      for (let i = 0; i < 7; i++) ring.push([i, 0]);
+      for (let i = 0; i < 7; i++) ring.push([7, i]);
+      for (let i = 7; i > 0; i--) ring.push([i, 7]);
+      for (let i = 7; i > 0; i--) ring.push([0, i]);
+      const pal = [[0, 0, 0], dim(PURPLE, 0.12), dim(PURPLE, 0.35), dim(PURPLE, 0.65), PURPLE];
+      const frames = Array.from({ length: 14 }, (_, f) => {
+        const g = grid(() => 0);
+        ring.forEach(([x, y], i) => {
+          const d = (f * 2 - i + 28) % 28;          // 0 = head of the arc
+          g[y][x] = d === 0 ? 4 : d <= 2 ? 3 : d <= 5 ? 2 : 1;
+        });
+        return g;
+      });
+      return { palette: pal, frames, fps: 7, fade: false };
+    }
 
     case 'X': { // glitch: dim cyan static, magenta flicks, bursts, a cutout
       const pal = [[0, 0, 0], dim(CYAN, 0.2), MAG, CYAN];
@@ -173,6 +190,33 @@ export function lookAnimation(look, s) {
       return { palette: pal, frames, fps: 14, fade: false };
     }
 
+    case 'h': { // heartbeat: a heart, lub (full) then dub (softer), then rest
+      const pal = [[0, 0, 0], dim(RED, 0.1), dim(RED, 0.55), RED];
+      const beat = [3, 1, 2, 1, 1, 1, 1, 1, 1, 1];
+      return { palette: pal, frames: beat.map((b) => grid((x, y) => (HEART[y][x] === '#' ? b : 0))), fps: 10, fade: false };
+    }
+
+    case 'G': { // /boo: a dim ghost bobbing, flaring bright now and then
+      const g = ['..####..', '.######.', '##.##.##', '########', '########', '########', '########', '#.##.##.'];
+      const at = (dy, c) => grid((x, y) => (y - dy >= 0 && g[y - dy][x] === '#' ? c : 0));
+      return { palette: [[0, 0, 0], [60, 64, 80], [190, 200, 255]],
+        frames: [at(0, 1), at(1, 1), at(0, 1), at(1, 1), at(0, 2)], fps: 3, fade: false };
+    }
+
+    case 'J': { // /pumpkin: jack-o'-lantern, the candle-lit face flickering
+      const p = ['...ss...', '.oooooo.', 'ofoooofo', 'oooooooo', 'offffffo', 'ooffffoo', '.oooooo.', '........'];
+      const idx = { '.': 0, o: 1, s: 3 };
+      return { palette: [[0, 0, 0], [255, 80, 0], [255, 190, 30], [30, 150, 30], [255, 120, 0]],
+        frames: Array.from({ length: 8 }, () => {
+          const lit = r() < 0.75 ? 2 : 4;
+          return grid((x, y) => (p[y][x] === 'f' ? lit : idx[p[y][x]]));
+        }), fps: 8, fade: false };
+    }
+
+    case 'P': // sign off: a flatline across the middle, fading in and out
+      return { palette: [[0, 0, 0], dim(WHITE, 0.12), WHITE],
+        frames: [2, 1].map((c) => grid((x, y) => (y === 4 ? c : 0))), fps: 1, fade: true };
+
     default:
       return null;
   }
@@ -194,6 +238,8 @@ export class Bolt extends RigDevice {
     this._waiting = null;
     this._lastShake = 0;
     this.shake = { on: true, sensitivity: 5 };
+    this._driveNext = null;   // newest [speed, heading] waiting to go
+    this._drivePump = null;
   }
 
   async setup(server) {
@@ -273,6 +319,31 @@ export class Bolt extends RigDevice {
 
   setMatrixColor([r, g, b]) {
     return this._io(CID.oneColor, [r, g, b]);
+  }
+
+  /** Roll at speed 0-255 toward heading 0-359 (0 = where it was aimed). Only the newest
+   *  command is kept while one is in flight, so a joystick can't build up a backlog. */
+  drive(speed, heading) {
+    this._driveNext = [Math.max(0, Math.min(255, Math.round(speed))), ((Math.round(heading) % 360) + 360) % 360];
+    if (this._drivePump) return;
+    this._drivePump = (async () => {
+      while (this._driveNext) {
+        const [sp, hd] = this._driveNext;
+        this._driveNext = null;
+        await this._send(spheroPacket(DRIVE, DRIVE_WITH_HEADING, [sp, hd >> 8, hd & 0xff, 0], SECONDARY));
+      }
+      this._drivePump = null;
+    })();
+  }
+
+  /** The way the BOLT faces now becomes heading 0 ("forward" on the stick). */
+  resetAim() {
+    return this._send(spheroPacket(DRIVE, DRIVE_RESET_YAW, [], SECONDARY));
+  }
+
+  /** Self-balancing on, so it drives straight and holds its heading when stopped. */
+  stabilize() {
+    return this._send(spheroPacket(DRIVE, DRIVE_STABILIZATION, [1], SECONDARY));
   }
 
   /** Shake detection = the BOLT's accelerometer collision events. Sensitivity 1-10;

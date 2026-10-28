@@ -12,9 +12,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['octlet.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'],
       manifest: {
-        name: 'STEAMWorkz Rig Controller',
-        short_name: 'Rig',
-        description: 'Mode controller for the STEAMWorkz cyber rig',
+        name: 'STEAMWorkz Cyber Deck',
+        short_name: 'Cyber Deck',
+        description: 'The deck that runs the STEAMWorkz cyber rig',
         start_url: base,
         scope: base,
         display: 'standalone',

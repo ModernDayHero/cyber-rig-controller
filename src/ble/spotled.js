@@ -187,6 +187,7 @@ const FONT = {
   C: ['###', '#..', '#..', '#..', '###'], D: ['##.', '#.#', '#.#', '#.#', '##.'],
   E: ['###', '#..', '##.', '#..', '###'], F: ['###', '#..', '##.', '#..', '#..'],
   I: ['###', '.#.', '.#.', '.#.', '###'], L: ['#..', '#..', '#..', '#..', '###'],
+  N: ['##.', '#.#', '#.#', '#.#', '#.#'],
   O: ['###', '#.#', '#.#', '#.#', '###'], R: ['##.', '#.#', '##.', '#.#', '#.#'],
   S: ['###', '#..', '###', '..#', '###'], T: ['###', '.#.', '.#.', '.#.', '.#.'],
   U: ['#.#', '#.#', '#.#', '#.#', '###'], V: ['#.#', '#.#', '#.#', '#.#', '.#.'],
@@ -236,7 +237,10 @@ function drawText(cv, text, ox, oy, color) {
 
 const PURPLE = [160, 60, 255], MAG = [255, 43, 214], CYAN = [0, 229, 255];
 const RED = [255, 30, 30], GREEN = [34, 255, 102], WHITE = [255, 255, 255], BLACK = [0, 0, 0];
-const BASE = { PURPLE, MAG, CYAN, RED, GREEN: [20, 255, 30] };   // matrix: pure green on this panel
+const BASE = { PURPLE, MAG, CYAN, RED, GREEN: [20, 255, 30], WHITE };   // matrix: pure green on this panel
+const GHOST = [150, 160, 200], PUMPKIN = [255, 80, 0], CANDLE = [255, 190, 30];   // /boo, /pumpkin
+// Heartbeat trace: offset from the baseline per column (negative = up), one beat per 32 px.
+const ECG = Array.from({ length: 32 }, (_, x) => ({ 6: -1, 7: -1, 10: 1, 11: -6, 12: 3, 13: 1, 17: -2, 18: -2, 19: -1 })[x] ?? 0);
 let KB = 1;                                    // brightness of the look being built (tuning)
 const rgbK = (c) => rgb323(KB === 1 ? c : scale(c, KB));
 const scale = (c, k) => c.map((v) => v * k);
@@ -256,7 +260,7 @@ export function lookFrames(look, s, w = 32, h = 16) {
 }
 
 function lookFramesRaw(look, s, w, h) {
-  const { PURPLE, MAG, CYAN, RED, GREEN } = lookPalette(s, look.key, BASE);
+  const { PURPLE, MAG, CYAN, RED, GREEN, WHITE } = lookPalette(s, look.key, BASE);
   const HEAD = GREEN === BASE.GREEN ? [210, 255, 210] : GREEN.map((v) => Math.min(255, (v >> 1) + 128));
   const frame = (fn) => {
     const px = new Uint8Array(w * h);
@@ -438,6 +442,58 @@ function lookFramesRaw(look, s, w, h) {
         } else {                                                 // 'n': a burst of noise
           for (let i = 0; i < w * h * 0.25; i++) cv.set(Math.floor(Math.random() * w), Math.floor(Math.random() * h), pick([RED, MAG, WHITE]));
         }
+        return cv.frame();
+      }) };
+    }
+    case 'h': { // heartbeat: an ECG trace, written left to right with a bright head and
+                // a dark gap just ahead of it, like a monitor redrawing
+      const n = 16, base = Math.round(h * 0.6), trail = w - 6;
+      return { ms: 70, frames: Array.from({ length: n }, (_, f) => {
+        const cv = canvas(w, h), head = f * (w / n);
+        for (let x = 0; x < w; x++) {
+          const age = (head - x + w) % w;
+          if (age > trail) continue;
+          const c = age === 0 ? WHITE : scale(RED, Math.max(0.15, 1 - age / trail));
+          const y0 = base + ECG[(x + w - 1) % w], y1 = base + ECG[x];
+          for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) cv.set(x, y, c);
+        }
+        return cv.frame();
+      }) };
+    }
+    case 'G': { // /boo: a ghost drifting side to side, BOO flashing up beside it
+      const sprite = ['...####...', '.########.', '##########', '##..##..##', '##..##..##', '##########',
+        '####..####', '####..####', '##########', '##########', '##########', '#.#.##.#.#'];
+      const n = 16;
+      return { ms: 150, frames: Array.from({ length: n }, (_, f) => {
+        const cv = canvas(w, h);
+        const gx = Math.round((w - 10) / 2 + 9 * Math.sin(2 * Math.PI * f / n)), gy = 2 + (f % 4 < 2 ? 0 : 1);
+        sprite.forEach((row, y) => [...row].forEach((p, x) => { if (p === '#') cv.set(gx + x, gy + y, GHOST); }));
+        if (f % 8 >= 5) drawText(cv, 'BOO', gx < (w - 10) / 2 ? w - 12 : 1, 1, GHOST);
+        return cv.frame();
+      }) };
+    }
+    case 'J': { // /pumpkin: a jack-o'-lantern, its face flickering like a candle
+      const cx = (w - 1) / 2, cy = 8.5;
+      const eye = (x, y) => (y === 5 && x >= 11 && x <= 12) || (y === 6 && x >= 10 && x <= 13) || (y === 7 && x >= 9 && x <= 14);
+      const isFace = (x, y) => eye(x, y) || eye(w - 1 - x, y) || (y === 8 && (x === 15 || x === 16))
+        || (y === 10 && x >= 9 && x <= 22 && x !== 12 && x !== 19) || (y === 11 && x >= 10 && x <= 21 && x !== 15 && x !== 16);
+      return { ms: 120, frames: Array.from({ length: 8 }, () => {
+        const lit = r() < 0.75 ? CANDLE : [255, 120, 0];
+        return frame((x, y) => {
+          if (y <= 1 && (x === 15 || x === 16)) return [30, 150, 30];          // stem
+          if (((x - cx) / 12) ** 2 + ((y - cy) / 7) ** 2 > 1) return BLACK;
+          if (isFace(x, y)) return lit;
+          return Math.abs(Math.abs(x - cx) - 5) < 0.6 ? [170, 50, 0] : PUMPKIN;  // ribs
+        });
+      }) };
+    }
+    case 'P': { // sign off: OFFLINE, dim, flickering like a dying screen
+      const tx = Math.round((w - 27) / 2), ty = Math.round((h - 5) / 2);
+      const plan = [1, 1, 1, 0.6, 1, 1, 0, 1, 'tear', 1];
+      return { ms: 220, frames: plan.map((p) => {
+        const cv = canvas(w, h);
+        if (p) drawText(cv, 'OFFLINE', tx, ty, scale(WHITE, 0.4 * (p === 'tear' ? 1 : p)));
+        if (p === 'tear') cv.rowShift(ty + 2, 2);
         return cv.frame();
       }) };
     }

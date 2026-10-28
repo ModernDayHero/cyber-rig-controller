@@ -1,7 +1,7 @@
-# STEAMWorkz Rig Controller
+# STEAMWorkz Cyber Deck
 
-Phone controller for the STEAMWorkz cyber rig. A Web Bluetooth PWA for Chrome on
-Android, hosted on GitHub Pages.
+The phone deck that runs the STEAMWorkz cyber rig. A Web Bluetooth PWA for Chrome on
+Android, hosted on GitHub Pages (the repo and URL keep the old `cyber-rig-controller` name).
 
 ```
 Phone ──BLE──▶ CLUE (watch) ──BLE──▶ Rebreather mask, left + right (Circuit Playground Bluefruit ×2)

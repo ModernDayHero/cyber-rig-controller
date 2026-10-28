@@ -7,10 +7,11 @@ export const SETS = {
   os: {
     label: 'STEAMWorkz OS',
     modes: [
-      { key: 'D', name: 'Dark',     color: '#A03CFF', hint: 'purple breathing' },
+      { key: 'D', name: 'Dark',     color: '#A03CFF', hint: 'dark purple, rotating' },
       { key: 'X', name: 'Glitch',   color: '#FF2BD6', alt: '#00E5FF', hint: 'bursts + cutouts' },
       { key: 'r', name: 'Rainfall', color: '#B040FF', alt: '#00E5FF', hint: 'rain + lightning' },
       { key: 'M', name: 'Matrix',   color: '#22FF66', hint: 'green digital rain' },
+      { key: 'h', name: 'Heartbeat', color: '#FF1E1E', hint: 'lub-dub pulse' },
     ],
   },
   alt: {
@@ -22,6 +23,7 @@ export const SETS = {
       { key: 'H', name: 'Hack',       color: '#FF1E1E', alt: '#FF2BD6', hint: 'release the virus' },
       // Clock face on the CLUE; the mask / hat / BOLT run Dark (lookAs) meanwhile.
       { key: 'W', name: 'Watch',      color: '#39B6C0', hint: 'Octlet clock', lookAs: 'D' },
+      { key: 'P', name: 'Sign off',   color: '#E6E6FF', hint: 'flare, then fade out' },
     ],
   },
 };
@@ -52,6 +54,8 @@ export const TUNE = {
   R: { bright: 100, colors: [],                     labels: [] },
   B: { bright: 100, colors: [],                     labels: [] },
   H: { bright: 100, colors: ['#FF1E1E', '#FF2BD6'], labels: ['VIRUS', 'STABS'] },
+  h: { bright: 100, colors: ['#FF1E1E'],            labels: ['PULSE'] },
+  P: { bright: 100, colors: ['#FFFFFF'],            labels: ['FADE'] },
 };
 const tuneKey = (k) => (k === 'hack' || k === 'F' ? 'H' : k);
 
@@ -72,6 +76,8 @@ export function lookPalette(s, key, base) {
     case 'r': return { ...base, PURPLE: a, CYAN: b, MAG: mid };   // third drop = blend
     case 'M': return { ...base, GREEN: a };
     case 'H': return { ...base, RED: a, MAG: b };
+    case 'h': return { ...base, RED: a };
+    case 'P': return { ...base, WHITE: a };
     default: return base;
   }
 }
@@ -111,8 +117,15 @@ export const cmd = {
   wake: () => 'P wake',
   hack: () => 'H',
   purge: () => 'K',
+  // Incoming call ('c') / message ('m'); text = caller or message, shown on the CLUE.
+  alert: (kind, text = '') => `N ${kind}${text ? ' ' + text : ''}`,
+  egg: (name) => `X ${name}`,
   query: () => '?',
 };
+
+// Slash commands typed in the INCOMING box. Eggs: look key the hat / BOLT show
+// meanwhile (null = no picture), for as long as the CLUE runs them.
+export const EGGS = { boo: { look: 'G', ms: 12000 }, pumpkin: { look: 'J', ms: 12000 }, secret: { look: null, ms: 3000 } };
 
 export const modeOf = (s) => SETS[s.set].modes[s.idx[s.set]];
 
@@ -122,6 +135,7 @@ export const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 /** What the cap and BOLT should show for the current rig state: one key + colour. */
 export function look(s) {
   if (s.power === POWER.OFF || s.power === POWER.STANDBY) return { key: s.power, rgb: [0, 0, 0], on: false };
+  if (s.egg) return { key: s.egg, rgb: s.egg === 'G' ? [150, 160, 200] : [255, 80, 0], on: true };
   if (s.hacked) return { key: 'hack', rgb: [255, 30, 30], on: true };
   const m = modeOf(s);
   const c = m.breathe ? s.pair[0] : rgb(m.color);

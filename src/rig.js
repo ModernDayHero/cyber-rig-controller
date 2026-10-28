@@ -6,7 +6,7 @@
 import { Clue } from './ble/clue.js';
 import { Bolt } from './ble/bolt.js';
 import { SpotLed } from './ble/spotled.js';
-import { BRIGHTNESS, BREATHE_IDX, DEFAULT_HACK_TIMER, DEFAULT_PAIR, DEFAULT_RAINBOW, POWER, SETS, TUNE, cmd, look, tuneOf } from './config.js';
+import { BRIGHTNESS, BREATHE_IDX, DEFAULT_HACK_TIMER, DEFAULT_PAIR, DEFAULT_RAINBOW, EGGS, POWER, SETS, TUNE, cmd, look, tuneOf } from './config.js';
 
 const STORE_KEY = 'rig-state-v3';
 
@@ -70,9 +70,10 @@ export class Rig extends EventTarget {
       this.pushBolt();
     });
 
-    // Shaking the BOLT during a hack purges it, like shaking the CLUE.
+    // Shaking the BOLT during a hack purges it, like shaking the CLUE (not while
+    // driving: every bump would count).
     this.bolt.addEventListener('shake', () => {
-      if (this.state.hacked && this.state.bolt.shake) {
+      if (this.state.hacked && this.state.bolt.shake && !this.driving) {
         this.purge();
         this.dispatchEvent(new Event('boltshake'));
       }
@@ -264,6 +265,25 @@ export class Rig extends EventTarget {
   shutDown() { this.clue.send(cmd.off()); this._update({ power: POWER.OFF }); }
   wake() { this.clue.send(cmd.wake()); this._update({ power: POWER.WAKING }); }
   purge() { this.clue.send(cmd.purge()); }
+  alert(kind, text) { this.clue.send(cmd.alert(kind, text)); }
+  hack() { this.clue.send(cmd.hack()); }
+
+  /** BOLT drive mode on / off (the DRIVE panel does the steering and the stopping). */
+  setDriving(on) {
+    this.driving = on;
+    if (on) this.bolt.stabilize();
+  }
+
+  /** /boo, /pumpkin, /secret: the CLUE runs the mask + its screen; the hat and BOLT
+   *  show the egg's look for the same time, then follow the rig again. */
+  egg(name) {
+    const e = EGGS[name];
+    this.clue.send(cmd.egg(name));
+    if (!e.look) return;
+    this._update({ egg: e.look });
+    clearTimeout(this._eggTimer);
+    this._eggTimer = setTimeout(() => this._update({ egg: null }), e.ms);
+  }
 
   /** Reconnect devices Chrome already granted, without a picker. */
   restoreAll() {

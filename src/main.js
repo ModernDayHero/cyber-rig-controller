@@ -1,12 +1,14 @@
 import './style.css';
-import { SETS, BREATHE_IDX, RAINBOW_IDX, HACK_IDX, HACK_TIMER, RAINBOW, POWER, TUNE, hex, rgb, modeOf, tuneOf } from './config.js';
+import { SETS, BREATHE_IDX, RAINBOW_IDX, HACK_IDX, HACK_TIMER, RAINBOW, POWER, TUNE, EGGS, hex, rgb, modeOf, tuneOf } from './config.js';
 import { Rig } from './rig.js';
 import { decodeImage, toBolt, toHat, paintPreview, paintHat } from './image.js';
 import { EFFECTS, rgb323, fromRgb323 } from './ble/spotled.js';
 import { Status } from './ble/device.js';
+import { setupDrive } from './drive.js';
 
 const $ = (id) => document.getElementById(id);
 const rig = new Rig();
+setupDrive(rig, $);
 
 // ---------- set tabs + mode tiles ----------
 const tabEls = {};
@@ -142,6 +144,36 @@ function renderHackTimer(t) {
     : t.max ? `Random hijack: every ${t.min}–${t.max} s` : 'Random hijack: off';
 }
 
+// ---------- incoming call / message, slash commands ----------
+// The CLUE's terminal font is plain ASCII, so the text goes over upper-cased and stripped.
+const alertText = () => $('alertText').value.toUpperCase().replace(/[^ -~]/g, '').replace(/\s+/g, ' ').trim();
+function sendAlert(kind) {
+  rig.alert(kind, alertText());
+  const b = $('alertSend').querySelector(`[data-kind="${kind}"]`);
+  b.classList.add('on');
+  setTimeout(() => b.classList.remove('on'), kind === 'c' ? 5200 : 1000);
+}
+for (const b of $('alertSend').querySelectorAll('button')) b.addEventListener('click', () => sendAlert(b.dataset.kind));
+
+const SLASH = {
+  hack: () => rig.hack(),
+  purge: () => rig.purge(),
+  ...Object.fromEntries(Object.keys(EGGS).map((name) => [name, () => rig.egg(name)])),
+};
+// Enter: /command runs it, anything else goes out as a message.
+$('alertText').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const v = $('alertText').value.trim();
+  if (!v.startsWith('/')) { sendAlert('m'); return; }
+  const run = SLASH[v.slice(1).toLowerCase()];
+  if (run) {
+    run();
+    $('alertText').value = '';
+  } else {
+    showBanner(`Unknown command ${v}. Try ${Object.keys(SLASH).map((k) => '/' + k).join(' ')}`);
+  }
+});
+
 // ---------- views: RIG / BOLT / HAT ----------
 const VIEW_KEY = 'rig-view';
 let view = localStorage.getItem(VIEW_KEY) || 'rig';
@@ -158,6 +190,7 @@ showView(view);
 const BOLT_LOOKS = [
   ['D', 'Dark'], ['X', 'Glitch'], ['r', 'Rainfall'], ['M', 'Matrix'],
   ['A', 'VU'], ['R', 'Rainbow'], ['B', 'Rebreather'], ['hack', 'Hack'],
+  ['h', 'Heartbeat'], ['P', 'Sign off'],
 ];
 const boltLookEls = BOLT_LOOKS.map(([key, name]) => {
   const b = document.createElement('button');

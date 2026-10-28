@@ -118,6 +118,22 @@ body.hacked .current { animation: glitch 0.5s steps(2) infinite; }
 }
 .looks button.on { color: #fff; border-color: var(--accent); box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 40%, transparent); }
 
+/* ---------- BOLT drive stick ---------- */
+.stick {
+  position: relative; width: min(240px, 70vw); aspect-ratio: 1; margin: 4px auto; border-radius: 50%;
+  border: 1px solid var(--line); touch-action: none; user-select: none;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 14%, var(--panel)) 0 30%, var(--panel) 70%);
+}
+.stick::before, .stick::after { content: ''; position: absolute; background: var(--line); }
+.stick::before { left: 50%; top: 10%; bottom: 10%; width: 1px; }
+.stick::after { top: 50%; left: 10%; right: 10%; height: 1px; }
+.knob {
+  position: absolute; left: 50%; top: 50%; width: 28%; aspect-ratio: 1; border-radius: 50%; z-index: 1;
+  transform: translate(-50%, -50%); background: color-mix(in srgb, var(--accent) 45%, var(--panel));
+  border: 1px solid var(--accent); transition: left 0.15s, top 0.15s;
+}
+.stick.live .knob { background: var(--accent); box-shadow: 0 0 18px var(--accent); transition: none; }
+
 input.text {
   font: inherit; font-size: 15px; color: var(--text); background: var(--panel);
   border: 1px solid var(--line); border-radius: 6px; padding: 12px; width: 100%; user-select: text;

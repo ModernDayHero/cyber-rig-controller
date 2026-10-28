@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#000000" />
-    <title>Rig Controller</title>
+    <title>Cyber Deck</title>
     <link rel="icon" type="image/svg+xml" href="octlet.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
@@ -14,7 +14,7 @@
       <header class="top">
         <div class="brand">
           <img class="brand-mark" src="octlet.svg" alt="" />
-          <span>STEAMWorkz//RIG</span>
+          <span>STEAMWorkz//DECK</span>
         </div>
         <span class="current" id="current">DARK</span>
       </header>
@@ -94,6 +94,18 @@
           </div>
           <span class="hint" id="hackTimerHint">every 3–5 min</span>
         </section>
+
+        <section class="panel" id="alertpanel" aria-label="Incoming call or message">
+          <div class="row">
+            <span class="label">INCOMING</span>
+            <div class="seg" id="alertSend">
+              <button data-kind="c">CALL</button>
+              <button data-kind="m">MSG</button>
+            </div>
+          </div>
+          <input class="text" id="alertText" maxlength="18" placeholder="caller / message, or /command" enterkeyhint="send" />
+          <span class="hint">Enter sends a message. Try /hack /purge /boo /pumpkin /secret</span>
+        </section>
       </div>
 
       <!-- ================= BOLT ================= -->
@@ -151,6 +163,40 @@
               </div>
             </div>
             <button class="ghost" id="boltImgSend" disabled>SEND TO BOLT</button>
+          </div>
+        </section>
+
+        <section class="panel" id="drivepanel" aria-label="Drive the BOLT">
+          <div class="row">
+            <span class="label">DRIVE</span>
+            <div class="seg" id="driveOn">
+              <button data-on="0">OFF</button>
+              <button data-on="1">ON</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="label">MAX</span>
+            <input type="range" id="driveMax" min="10" max="100" step="5" />
+            <output id="driveMaxOut">40%</output>
+          </div>
+          <div class="panel" id="driveBox" hidden>
+            <div class="stick" id="stick"><div class="knob" id="knob"></div></div>
+            <span class="hint" id="driveHint">Drag the stick. Let go to stop.</span>
+            <div class="row">
+              <span class="label">STEER</span>
+              <div class="seg" id="driveTilt">
+                <button data-tilt="0">TOUCH</button>
+                <button data-tilt="1">PHONE TILT</button>
+              </div>
+            </div>
+            <div class="row">
+              <span class="label">AIM</span>
+              <div class="seg seg3" id="driveAim">
+                <button data-aim="-15">◀ 15°</button>
+                <button data-aim="0">SET</button>
+                <button data-aim="15">15° ▶</button>
+              </div>
+            </div>
           </div>
         </section>
 
