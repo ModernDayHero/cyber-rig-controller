@@ -157,12 +157,21 @@ for (const b of $('alertSend').querySelectorAll('button')) b.addEventListener('c
 for (const b of $('mute').querySelectorAll('button')) b.addEventListener('click', () => rig.setMuted(b.dataset.muted === '1'));
 for (const b of $('showCmd').querySelectorAll('button')) b.addEventListener('click', () => rig.setShowCmd(b.dataset.show === '1'));
 
+// Every mode is a command too, by its name: /dark /matrix /rainbow /signoff ...
+const MODE_CMDS = {};
+for (const [set, { modes }] of Object.entries(SETS)) {
+  modes.forEach((m, i) => {
+    MODE_CMDS[m.name.toLowerCase().replace(/[^a-z0-9]/g, '')] = () => { if (!rig.setMode(set, i)) flashLocked(); };
+  });
+}
+MODE_CMDS.audio = MODE_CMDS.vu;
 const SLASH = {
-  hack: () => rig.hack(),
+  ...MODE_CMDS,
+  hack: () => rig.hack(),               // the HACK mode is the virus: same thing
   purge: () => rig.purge(),
   ...Object.fromEntries(Object.keys(EGGS).filter((n) => !EGGS[n].notCmd).map((name) => [name, () => rig.egg(name)])),
 };
-const LISTED = Object.keys(SLASH).filter((n) => !EGGS[n]?.hidden).map((n) => '/' + n).join(' ');
+const LISTED = Object.keys(SLASH).filter((n) => !EGGS[n]?.hidden && n !== 'audio').map((n) => '/' + n).join(' ');
 // Enter: /command runs it, anything else goes out as a message. A /word that isn't
 // a command still gets a show: the word, then a big ? on the rig.
 $('alertText').addEventListener('keydown', (e) => {
