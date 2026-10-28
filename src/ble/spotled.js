@@ -191,6 +191,13 @@ const FONT = {
   M: ['#.#', '###', '###', '#.#', '#.#'], K: ['#.#', '#.#', '##.', '#.#', '#.#'],
   H: ['#.#', '#.#', '###', '#.#', '#.#'], G: ['###', '#..', '#.#', '#.#', '###'],
   '/': ['..#', '..#', '.#.', '#..', '#..'],
+  J: ['..#', '..#', '..#', '#.#', '###'], Q: ['###', '#.#', '#.#', '###', '..#'],
+  W: ['#.#', '#.#', '###', '###', '#.#'], Y: ['#.#', '#.#', '.#.', '.#.', '.#.'],
+  Z: ['###', '..#', '.#.', '#..', '###'], '!': ['.#.', '.#.', '.#.', '...', '.#.'],
+  '?': ['###', '..#', '.##', '...', '.#.'], '-': ['...', '...', '###', '...', '...'],
+  ':': ['...', '.#.', '...', '.#.', '...'], "'": ['.#.', '.#.', '...', '...', '...'],
+  ',': ['...', '...', '...', '.#.', '#..'], '>': ['#..', '.#.', '..#', '.#.', '#..'],
+  '<': ['..#', '.#.', '#..', '.#.', '..#'],
   O: ['###', '#.#', '#.#', '#.#', '###'], R: ['##.', '#.#', '##.', '#.#', '#.#'],
   S: ['###', '#..', '###', '..#', '###'], T: ['###', '.#.', '.#.', '.#.', '.#.'],
   U: ['#.#', '#.#', '#.#', '#.#', '###'], V: ['#.#', '#.#', '#.#', '#.#', '.#.'],
@@ -490,6 +497,45 @@ function lookFramesRaw(look, s, w, h) {
         });
       }) };
     }
+    case 'v': { // /vamp: a bat flapping past a blood moon
+      const up = ['#.........#', '##.......##', '.###.#.###.', '..#######..', '....#.#....'];
+      const down = ['....#.#....', '..#######..', '.###.#.###.', '##.......##', '#.........#'];
+      const n = 8;
+      return { ms: 200, frames: Array.from({ length: n }, (_, f) => {
+        const cv = canvas(w, h);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if ((x - 22) ** 2 + (y - 7) ** 2 <= 40) cv.set(x, y, [150, 0, 10]);
+        const bx = Math.round(f * (w - 11) / (n - 1)), by = 5 + (f % 2);
+        (f % 2 ? down : up).forEach((row, y) => [...row].forEach((p, x) => { if (p === '#') cv.set(bx + x, by + y, [110, 0, 160]); }));
+        return cv.frame();
+      }) };
+    }
+    case 'k': { // /frank: the monster's face, sparks jumping off the neck bolts
+      const GREEN_F = [60, 200, 50], BOLT = [120, 120, 120], ZAP = [255, 255, 120];
+      return { ms: 150, frames: Array.from({ length: 6 }, (_, f) => {
+        const zap = f === 2 || f === 4;
+        return frame((x, y) => {
+          if ((y === 11 || y === 12) && (x === 8 || x === 9 || x === 22 || x === 23)) return BOLT;
+          if (zap && (y >= 8 && y <= 14) && (x === 6 || x === 25) && r() < 0.6) return ZAP;
+          if (x < 10 || x > 21 || y < 3 || y > 14) return BLACK;
+          if (y <= 4 || (y === 5 && x % 2)) return BLACK;                            // hair, jagged fringe
+          if (y === 7 && (x === 12 || x === 13 || x === 18 || x === 19)) return BLACK; // eyes
+          if (y === 11 && x >= 13 && x <= 18) return BLACK;                            // mouth
+          if ((y === 10 || y === 12) && (x === 14 || x === 17)) return BLACK;          // stitches
+          return GREEN_F;
+        });
+      }) };
+    }
+    case 'f': { // /fish: swimming across, bubbles rising
+      const fish = ['..####...#', '.######.##', '#.#######.', '#########.', '.######.##', '..####...#'];
+      const n = 8;
+      return { ms: 180, frames: Array.from({ length: n }, (_, f) => {
+        const cv = canvas(w, h);
+        const fx = Math.round((w - 10) * (1 - f / (n - 1))), fy = 5 + (f % 2);
+        fish.forEach((row, y) => [...row].forEach((p, x) => { if (p === '#') cv.set(fx + x, fy + y, [255, 140, 26]); }));
+        for (const [bx, b0] of [[4, 0], [14, 5], [27, 10]]) cv.set(bx, h - 1 - ((b0 + f * 2) % h), [100, 180, 255]);
+        return cv.frame();
+      }) };
+    }
     case 'P': { // sign off: OFFLINE, dim, flickering like a dying screen
       const tx = Math.round((w - 27) / 2), ty = Math.round((h - 5) / 2);
       const plan = [1, 1, 1, 0.6, 1, 1, 0, 1, 'tear', 1];
@@ -708,6 +754,20 @@ export class SpotLed extends RigDevice {
       return cv.frame();
     });
     await this.showFrames(frames, { ms: 250 }, JSON.stringify(['title', text, color]));
+  }
+
+  /** A message scrolling across: one frame wider than the hat, double-size letters,
+   *  scrolled by the hat's own scroll-left effect (no 20-frame limit on length). */
+  async showMessage(text, color) {
+    const { height: h } = this.info;
+    const fw = text.length * 8 + this.info.width;           // trailing gap before it loops
+    const px = new Uint8Array(fw * h), c = rgb323(color), y0 = Math.round((h - 10) / 2);
+    [...text].forEach((ch, i) => (FONT[ch] || []).forEach((row, y) => [...row].forEach((p, x) => {
+      if (p !== '#') return;
+      for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) px[(y0 + y * 2 + dy) * fw + i * 8 + x * 2 + dx] = c;
+    })));
+    this._shown = JSON.stringify(['msg', text, color]);
+    await this.send(encodeAnimation([{ px }], fw, h, { ms: 1000, effect: EFFECTS.indexOf('scroll left') }));
   }
 
   /** Follow the rig: the look's animation at the hat's brightness. */

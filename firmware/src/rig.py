@@ -46,7 +46,7 @@
 #                                   (passed to the mask, kept in NVM across restarts)
 #                  P standby|off|wake
 #                  N c|m [text]     incoming call / message: mask lights + sound everywhere
-#                  X boo|pumpkin|secret   easter-egg sequence (~12 s), then back to the mode
+#                  X boo|pumpkin|vamp|frank|fish|secret   easter egg (20 s), then back to the mode
 #                  Q 0|1            mute: 1 silences the CLUE and the mask (sent on connect)
 #                  H  start the hack     K  purge it     ?  report everything
 #   CLUE -> phone  M <set> <i> / C r g b r g b / R sp w dir / T min max / P on|waking|blink|off /
@@ -780,8 +780,8 @@ def phone_cmd(w):
         if w[1] in ALERT_TIME:
             alert(w[1], " ".join(w[2:]))
     elif c == "X":
-        if w[1] in ("boo", "pumpkin", "secret"):
-            start_egg(w[1])
+        if w[1] in EGGS or w[1] == "secret":
+            start_egg(w[1], w[2] if len(w) > 2 else "")
     elif c == "K":
         if mode != "idle":
             term_push("> REMOTE PURGE // phone", CYAN)
@@ -904,6 +904,14 @@ SOUNDS = {
     "a": ((0.0, 0.03, WHOOP), (0.55, 0.15, (1568, 1046) * 4), (1.85, 0.03, WHOOP)),
     "g": ((0.0, 0.04, tuple(300 + 5 * i for i in range(30))),),     # /boo: a rising wooo
     "p": ((0.0, 0.12, (A4, 523, E5, 622, 523, A4, 0, 330)),),     # /pumpkin: spooky arpeggio
+    # /vamp: the opening of Bach's Toccata and Fugue in D minor (public domain)
+    "v": ((0.0, 0.12, (A5, 784, A5, 0, 784, F5, E5, D5, 554, D5)),),
+    # /frank: an electric zap, buzzing between a high and a low tone
+    "k": ((0.0, 0.02, tuple((1800 if i % 2 else 300) + 37 * (i % 7) for i in range(40))),),
+    # /fish: three runs of bubbles
+    "f": ((0.0, 0.03, tuple(500 + 60 * i for i in range(10))),
+          (0.45, 0.03, tuple(700 + 60 * i for i in range(10))),
+          (0.9, 0.03, tuple(600 + 80 * i for i in range(10)))),
 }
 ALERT_TIME = {"m": 1.0, "c": 5.2}
 speaker = pwmio.PWMOut(board.SPEAKER, frequency=2000, duty_cycle=0, variable_frequency=True)
@@ -958,42 +966,122 @@ def alert(k, text):
     else:
         term_push("> MSG // " + (text or "1 new packet"), CYAN)
 
-# ---------- easter eggs (phone X): /boo, /pumpkin, /secret ----------
-# A full-screen overlay on top of everything; the mask runs G / J meanwhile,
-# then everything goes back to the mode it was in.
+# ---------- easter eggs (phone X): /boo /pumpkin /vamp /frank /fish /secret ----------
+# A full-screen overlay on top of everything while the mask runs the egg's mode,
+# then everything goes back to the mode it was in. Each picture is built when its
+# egg starts and dropped when it ends, so they cost no RAM the rest of the time.
 EGG_TIME = 20.0           # long enough to outlast the hat's 3-7 s upload
-GHOST_C, ORANGE, STEM, CANDLE = 0xA0A8C8, 0xFF5A00, 0x2E8B2E, 0xFFC020
+# name: (mask byte, sound, caption, caption colour, background)
+EGGS = {
+    "boo":     (b"G", "g", "BOO.",              0xA0A8C8, 0),
+    "pumpkin": (b"J", "p", "TRICK OR TREAT",    0xFF5A00, 0),
+    "vamp":    (b"v", "v", "I VANT YOUR BLOOD", 0xC00010, 0),
+    "frank":   (b"k", "k", "IT'S ALIVE!",       0x60E040, 0x081008),
+    "fish":    (b"f", "f", "BLUB BLUB",         0x60C0FF, 0x001830),
+}
+egg_bg = _pal(0)
 egg = displayio.Group()
-egg.append(vectorio.Rectangle(pixel_shader=_pal(0), width=240, height=240, x=0, y=0))
-ghost = displayio.Group(x=120, y=110)
-for gx in (-40, 0, 40):                              # wavy hem
-    ghost.append(vectorio.Circle(pixel_shader=_pal(GHOST_C), radius=21, x=gx, y=58))
-ghost.append(vectorio.Rectangle(pixel_shader=_pal(GHOST_C), width=122, height=60, x=-61, y=0))
-ghost.append(vectorio.Circle(pixel_shader=_pal(GHOST_C), radius=61, x=0, y=0))
-for gx in (-22, 22):
-    ghost.append(vectorio.Circle(pixel_shader=_pal(0), radius=11, x=gx, y=-8))
-ghost.append(vectorio.Circle(pixel_shader=_pal(0), radius=9, x=0, y=26))    # "ooo"
-pumpkin = displayio.Group(x=120, y=135)
-face = _pal(CANDLE)                                  # one palette: the candle flickers all of it
-pumpkin.append(vectorio.Rectangle(pixel_shader=_pal(STEM), width=16, height=30, x=-8, y=-88))
-for gx, r in ((-45, 55), (45, 55), (0, 65)):
-    pumpkin.append(vectorio.Circle(pixel_shader=_pal(ORANGE), radius=r, x=gx, y=0))
-for pts in (((-48, -12), (-18, -12), (-33, -38)), ((18, -12), (48, -12), (33, -38)),
-            ((-9, 10), (9, 10), (0, -4)),
-            ((-50, 20), (-36, 31), (-24, 22), (-12, 33), (0, 24), (12, 33), (24, 22),
-             (36, 31), (50, 20), (38, 46), (-38, 46))):
-    pumpkin.append(vectorio.Polygon(pixel_shader=face, points=list(pts), x=0, y=0))
-egg_txt = make_text(20, 0, 4, GHOST_C, scale=2)
-egg.append(ghost)
-egg.append(pumpkin)
+egg.append(vectorio.Rectangle(pixel_shader=egg_bg, width=240, height=240, x=0, y=0))
+egg.append(displayio.Group())             # the picture, swapped in per egg
+egg_txt = make_text(20, 0, 4, 0xFFFFFF, scale=2)
 egg.append(egg_txt[0])
 egg.hidden = True
 root.append(egg)
 egg_k = None
 egg_end = 0.0
+egg_fx = []               # the parts egg_step animates
+egg_cap_at = 0.0          # when the /command title gives way to the caption (0 = no title)
+EGG_TITLE = 2.0
 
-def start_egg(k):
-    global egg_k, egg_end
+def _c(color, r, x, y):
+    return vectorio.Circle(pixel_shader=_pal(color) if isinstance(color, int) else color, radius=r, x=x, y=y)
+
+def _r(color, w, h, x, y):
+    return vectorio.Rectangle(pixel_shader=_pal(color), width=w, height=h, x=x, y=y)
+
+def _p(color, pts):
+    return vectorio.Polygon(pixel_shader=_pal(color) if isinstance(color, int) else color, points=list(pts), x=0, y=0)
+
+def build_egg(k):
+    """-> (picture group, parts to animate)."""
+    g = displayio.Group(x=120, y=130)
+    if k == "boo":
+        g.y = 110
+        for gx in (-40, 0, 40):                      # wavy hem
+            g.append(_c(0xA0A8C8, 21, gx, 58))
+        g.append(_r(0xA0A8C8, 122, 60, -61, 0))
+        g.append(_c(0xA0A8C8, 61, 0, 0))
+        g.append(_c(0, 11, -22, -8))
+        g.append(_c(0, 11, 22, -8))
+        g.append(_c(0, 9, 0, 26))                    # "ooo"
+        return g, []
+    if k == "pumpkin":
+        face = _pal(0xFFC020)                        # one palette: the candle flickers all of it
+        g.y = 135
+        g.append(_r(0x2E8B2E, 16, 30, -8, -88))
+        for gx, r in ((-45, 55), (45, 55), (0, 65)):
+            g.append(_c(0xFF5A00, r, gx, 0))
+        for pts in (((-48, -12), (-18, -12), (-33, -38)), ((18, -12), (48, -12), (33, -38)),
+                    ((-9, 10), (9, 10), (0, -4)),
+                    ((-50, 20), (-36, 31), (-24, 22), (-12, 33), (0, 24), (12, 33), (24, 22),
+                     (36, 31), (50, 20), (38, 46), (-38, 46))):
+            g.append(_p(face, pts))
+        return g, [face]
+    if k == "vamp":                                  # a bat flapping across a blood moon
+        g.append(_c(0x900010, 72, 0, -10))
+        up, down = displayio.Group(), displayio.Group()
+        up.append(_p(0, ((-70, -25), (-45, -5), (-30, -15), (-12, 0), (12, 0), (30, -15), (45, -5),
+                         (70, -25), (55, 10), (35, 5), (20, 15), (0, 8), (-20, 15), (-35, 5), (-55, 10))))
+        down.append(_p(0, ((-65, 25), (-45, 5), (-30, 12), (-12, 0), (12, 0), (30, 12), (45, 5),
+                           (65, 25), (50, 30), (35, 18), (20, 22), (0, 10), (-20, 22), (-35, 18), (-50, 30))))
+        for b in (up, down):
+            b.append(_c(0, 11, 0, 2))
+            b.append(_p(0, ((-9, -4), (-6, -16), (-2, -6))))
+            b.append(_p(0, ((9, -4), (6, -16), (2, -6))))
+            b.append(_c(0xFF2020, 2, -4, 0))         # red eyes
+            b.append(_c(0xFF2020, 2, 4, 0))
+            g.append(b)
+        down.hidden = True
+        return g, [up, down]
+    if k == "frank":                                 # the monster, neck bolts sparking
+        g.append(_r(0x707070, 22, 14, -77, 25))
+        g.append(_r(0x707070, 22, 14, 55, 25))
+        g.append(_r(0x4CA04C, 110, 120, -55, -60))
+        g.append(_p(0, ((-58, -62), (58, -62), (58, -35), (40, -45), (25, -33), (10, -45), (-5, -33),
+                        (-20, -45), (-35, -33), (-50, -45), (-58, -35))))
+        g.append(_r(0x204020, 40, 3, -32, -24))      # forehead scar
+        for sx in (-26, -14, -2):
+            g.append(_r(0x204020, 2, 9, sx, -27))
+        g.append(_r(0, 20, 8, -36, -12))             # eyes
+        g.append(_r(0, 20, 8, 16, -12))
+        g.append(_r(0, 52, 4, -26, 32))              # stitched mouth
+        for sx in (-18, -6, 6, 18):
+            g.append(_r(0, 2, 12, sx, 28))
+        zaps = []
+        for side in (-1, 1):
+            z = _p(0xFFFF90, [(side * x, y) for x, y in
+                              ((88, 5), (98, 18), (90, 20), (104, 42), (86, 24), (94, 22))])
+            z.hidden = True
+            g.append(z)
+            zaps.append(z)
+        return g, zaps
+    if k == "fish":                                  # swimming, bubbles rising
+        g.y = 120
+        g.append(_p(0xE07010, ((40, 0), (85, -38), (78, 0), (85, 38))))       # tail
+        g.append(_p(0xE07010, ((-10, -36), (20, -58), (28, -32))))           # fin
+        g.append(_c(0xFF8C1A, 42, -12, 0))
+        g.append(_c(0xFF8C1A, 42, 12, 0))
+        g.append(_c(0xFFFFFF, 11, -32, -10))
+        g.append(_c(0, 5, -35, -10))
+        bubbles = [_c(0x80C0FF, r, -80 + i * 22, 60 - i * 40) for i, r in enumerate((6, 4, 8))]
+        for b in bubbles:
+            g.append(b)
+        return g, bubbles
+    return g, []
+
+def start_egg(k, title=""):
+    """title (e.g. /VAMPIRE) shows as the caption for EGG_TITLE s before the egg's own."""
+    global egg_k, egg_end, egg_fx, egg_cap_at
     egg_k, egg_end = k, time.monotonic() + EGG_TIME
     if k == "secret":                    # no picture: a refusal, loudly
         egg_end = time.monotonic() + 3.0
@@ -1001,27 +1089,50 @@ def start_egg(k):
         term_push("!! ACCESS DENIED // clearance: STEAMWorkz", RED)
         term_glitch(3)
         return
-    boo = k == "boo"
-    send(b"G" if boo else b"J")
-    ghost.hidden, pumpkin.hidden = not boo, boo
-    egg_txt[2][1] = GHOST_C if boo else ORANGE
-    set_text(egg_txt[1], "{:^20}".format("BOO." if boo else "TRICK OR TREAT"))
+    byte, snd, caption, color, bg = EGGS[k]
+    egg[1] = displayio.Group()           # drop the last picture before building this one
+    gc.collect()
+    egg[1], egg_fx = build_egg(k)
+    egg_bg[0] = bg
+    egg_txt[2][1] = color
+    set_text(egg_txt[1], "{:^20}".format(title[:20] or caption))
+    egg_cap_at = time.monotonic() + EGG_TITLE if title else 0.0
     egg.hidden = False
-    play("g" if boo else "p")
+    send(byte)
+    play(snd)
 
 def egg_step(now):
-    global egg_k
+    global egg_k, egg_fx, egg_cap_at
     if not egg_k:
         return
+    art = egg[1]
+    if egg_cap_at and now > egg_cap_at:  # the /command has had its moment: the caption
+        egg_cap_at = 0.0
+        set_text(egg_txt[1], "{:^20}".format(EGGS[egg_k][2]))
     if now > egg_end:
-        egg_k = None
+        egg_k, egg_fx = None, []
         egg.hidden = True
+        egg[1] = displayio.Group()       # free the picture
+        gc.collect()
         resend()
     elif egg_k == "boo":                 # drift and bob
-        ghost.x = 120 + int(14 * math.sin(now * 0.9))
-        ghost.y = 120 + int(10 * math.sin(now * 2.2))
+        art.x = 120 + int(14 * math.sin(now * 0.9))
+        art.y = 120 + int(10 * math.sin(now * 2.2))
     elif egg_k == "pumpkin":             # candle flicker
-        face[0] = CANDLE if random.random() > 0.2 else 0xFF8A00
+        egg_fx[0][0] = 0xFFC020 if random.random() > 0.2 else 0xFF8A00
+    elif egg_k == "vamp":                # flap, drifting across the moon
+        flap = int(now * 4) % 2
+        egg_fx[0].hidden, egg_fx[1].hidden = bool(flap), not flap
+        art.x = 120 + int(30 * math.sin(now * 0.7))
+    elif egg_k == "frank":               # sparks jump the neck bolts
+        for z in egg_fx:
+            z.hidden = random.random() > 0.25
+    elif egg_k == "fish":                # swim, bubbles rise and wrap
+        art.x = 120 + int(25 * math.sin(now * 0.8))
+        for b in egg_fx:
+            b.y -= 3
+            if b.y < -120:
+                b.y = 90
 
 def wheel(h):
     """0..1 hue -> saturated 0xRRGGBB."""

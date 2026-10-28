@@ -21,6 +21,9 @@
 #              green -> yellow -> red at the top, with a falling peak dot
 #   G ghost    dim white wisps drifting round, the odd "boo" flare      (phone /boo)
 #   J pumpkin  orange candle flicker, a yellow core where it burns hot  (phone /pumpkin)
+#   v vampire  blood drips running down each side, the odd black bat cut (phone /vamp)
+#   k frank    green glow, blue-white sparks crackling                  (phone /frank)
+#   f fish     ocean blues rolling round, bubbles sparkling             (phone /fish)
 #   Q m        mute (2 bytes): m = 1 silences every sound, 0 lets them play
 #   N k s      alert (3 bytes) over whatever mode is running: k = c call (holo-call
 #              ring spinning round) / m message (three cyan flashes); s = 1 also beeps
@@ -62,7 +65,11 @@ GHOST = (150, 160, 200)
 ORANGE = (255, 80, 0)
 CANDLE = (255, 170, 20)
 
-MODE_CHARS = "DXHhMRPAIFVWOrGJ"
+BLOOD = (200, 0, 10)
+FRANK = (60, 255, 40)
+SEA, SEA2 = (0, 60, 255), (0, 200, 200)
+
+MODE_CHARS = "DXHhMRPAIFVWOrGJvkf"
 PACKETS = {"C": 3, "B": 6, "S": 3, "Z": 8, "N": 2, "Q": 1}   # command -> number of data bytes that follow
 
 # Sounds. Segments: (start s, step s, notes Hz, side); the notes play one after
@@ -390,6 +397,25 @@ class Lens:
             k = 0.7 + 0.15 * math.sin(t * 13 + i) + 0.15 * math.sin(t * 7.3 + i * 2.1 + key)
             c = ORANGE if k < 0.85 else CANDLE        # hot moments burn yellow
             return scale(c, k)
+        if m == "v":
+            if self.cut > 0:                         # a bat passes
+                return OFF
+            s = i if i < 5 else 9 - i                # 0 = top of this side .. 4 = bottom
+            d = (t * 1.2 + (i >= 5) * 0.7 + key * 0.3) % 6 - s
+            if 0 <= d < 1:
+                return BLOOD
+            return scale(BLOOD, 0.08 + (0.4 * (2 - d) / 2 if 1 <= d < 2 else 0))
+        if m == "k":
+            if self.burst > 0 and random.random() > 0.7:
+                return (200, 220, 255)               # spark
+            return scale(FRANK, 0.3 + 0.25 * math.sin(t * 2 + i * 0.6))
+        if m == "f":
+            if random.random() < 0.004:
+                return (180, 220, 255)               # bubble
+            idx = N - 1 - i if key % 2 else i
+            w = 0.5 + 0.5 * math.sin(t * 1.5 + idx * 0.9)
+            return scale((int(SEA[0] + (SEA2[0] - SEA[0]) * w), int(SEA[1] + (SEA2[1] - SEA[1]) * w),
+                          int(SEA[2] + (SEA2[2] - SEA[2]) * w)), 0.3 + 0.5 * w)
         if m == "P":
             f = time.monotonic() - self.t0
             if f < 0.4:

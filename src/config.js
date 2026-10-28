@@ -119,7 +119,8 @@ export const cmd = {
   purge: () => 'K',
   // Incoming call ('c') / message ('m'); text = caller or message, shown on the CLUE.
   alert: (kind, text = '') => `N ${kind}${text ? ' ' + text : ''}`,
-  egg: (name) => `X ${name}`,
+  // title: shown on the CLUE first (TITLE: SHOW), e.g. /VAMPIRE; '' = straight to the caption.
+  egg: (name, title = '') => `X ${name}${title ? ' ' + title : ''}`,
   mute: (on) => `Q ${on ? 1 : 0}`,
   query: () => '?',
 };
@@ -128,9 +129,14 @@ export const cmd = {
 // meanwhile (null = no picture), for as long as the CLUE runs them.
 // 20 s, same as the CLUE's EGG_TIME: the hat needs a few seconds to upload before it shows.
 // The hat and BOLT show the command (in rgb) first, then the look, whatever they were on.
+// `as` = the name the CLUE knows it by, for aliases.
 export const EGGS = {
   boo: { look: 'G', ms: 20000, rgb: [150, 160, 200] },
   pumpkin: { look: 'J', ms: 20000, rgb: [255, 80, 0] },
+  vamp: { look: 'v', ms: 20000, rgb: [200, 0, 10] },
+  vampire: { look: 'v', ms: 20000, rgb: [200, 0, 10], as: 'vamp' },
+  frank: { look: 'k', ms: 20000, rgb: [60, 255, 40] },
+  fish: { look: 'f', ms: 20000, rgb: [0, 150, 255] },
   secret: { look: null, ms: 3000 },
 };
 

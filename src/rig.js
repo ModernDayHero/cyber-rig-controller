@@ -9,6 +9,7 @@ import { SpotLed } from './ble/spotled.js';
 import { BRIGHTNESS, BREATHE_IDX, DEFAULT_HACK_TIMER, DEFAULT_PAIR, DEFAULT_RAINBOW, EGGS, POWER, SETS, TUNE, cmd, look, tuneOf } from './config.js';
 
 const STORE_KEY = 'rig-state-v3';
+const MSG_MS = 10000;     // how long a call / message scrolls on the hat
 
 const DEFAULT_BOLT = {
   follow: true,                       // mirror the rig's mode
@@ -42,6 +43,7 @@ export class Rig extends EventTarget {
       hackTimer: saved.hackTimer ?? DEFAULT_HACK_TIMER,
       tunes: saved.tunes ?? {},          // only modes the user changed: key -> {bright, colors}
       muted: saved.muted ?? false,       // silences the CLUE + mask (sent on every connect)
+      showCmd: saved.showCmd ?? true,    // eggs: hat / BOLT show the /command before the look
       bolt: { ...DEFAULT_BOLT, ...saved.bolt, content: { ...DEFAULT_BOLT.content, ...saved.bolt?.content } },
       hat: { ...DEFAULT_HAT, ...saved.hat },
       power: POWER.ON,
@@ -103,8 +105,8 @@ export class Rig extends EventTarget {
   }
 
   _save() {
-    const { set, idx, pair, rainbow, hackTimer, tunes, muted, bolt, hat } = this.state;
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ set, idx, pair, rainbow, hackTimer, tunes, muted, bolt, hat })); } catch {}
+    const { set, idx, pair, rainbow, hackTimer, tunes, muted, showCmd, bolt, hat } = this.state;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ set, idx, pair, rainbow, hackTimer, tunes, muted, showCmd, bolt, hat })); } catch {}
   }
 
   /** What the rig looks like right now, for the devices that follow it. */
@@ -147,6 +149,7 @@ export class Rig extends EventTarget {
 
   pushCap() {
     if (!this.cap.available) return;      // the hat connects on demand
+    if (this.hatMsg && !this.state.egg) return;   // a message is scrolling: it puts the look back after
     const h = this.state.hat, lk = look(this.state);
     if (h.follow || !lk.on || !this.hatImage || this.state.egg) {
       this.cap.applyState({ ...this.state, look: lk });
@@ -267,12 +270,22 @@ export class Rig extends EventTarget {
   shutDown() { this.clue.send(cmd.off()); this._update({ power: POWER.OFF }); }
   wake() { this.clue.send(cmd.wake()); this._update({ power: POWER.WAKING }); }
   purge() { this.clue.send(cmd.purge()); }
-  alert(kind, text) { this.clue.send(cmd.alert(kind, text)); }
+  /** Incoming call / message: the CLUE runs the mask + sound; the hat scrolls it
+   *  for MSG_MS, then goes back to what it was showing. */
+  alert(kind, text) {
+    this.clue.send(cmd.alert(kind, text));
+    if (!this.cap.available || this.state.egg) return;
+    this.hatMsg = true;
+    this.cap.showMessage(kind === 'c' ? `CALL ${text || 'INCOMING'}` : `MSG ${text || '1 NEW PACKET'}`, [0, 229, 255]);
+    clearTimeout(this._msgTimer);
+    this._msgTimer = setTimeout(() => { this.hatMsg = false; this.pushCap(); }, MSG_MS);
+  }
   hack() { this.clue.send(cmd.hack()); }
   setMuted(on) {
     this.clue.send(cmd.mute(on));
     this._update({ muted: on });
   }
+  setShowCmd(on) { this._update({ showCmd: on }); }
 
   /** BOLT drive mode on / off (the DRIVE panel does the steering and the stopping). */
   setDriving(on) {
@@ -285,9 +298,9 @@ export class Rig extends EventTarget {
    *  OWN content too), then go back to what they were showing. */
   egg(name) {
     const e = EGGS[name];
-    this.clue.send(cmd.egg(name));
-    if (!e.look) return;
     const title = '/' + name.toUpperCase();
+    this.clue.send(cmd.egg(e.as || name, e.look && this.state.showCmd ? title : ''));
+    if (!e.look) return;
     this.state.egg = e.look;                 // not saved: it only lasts e.ms
     clearTimeout(this._eggTimer);
     this._eggTimer = setTimeout(() => {
@@ -295,6 +308,11 @@ export class Rig extends EventTarget {
       this.pushCap();
       this.pushBolt();
     }, e.ms);
+    if (!this.state.showCmd) {               // TITLE: SKIP - straight to the look
+      this.pushCap();
+      this.pushBolt();
+      return;
+    }
     const still = () => this.state.egg === e.look;
     if (this.bolt.connected) {
       this.bolt.scrollText(title, e.rgb, 12, this.state.bolt.brightness)

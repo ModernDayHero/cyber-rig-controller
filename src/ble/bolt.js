@@ -213,6 +213,27 @@ export function lookAnimation(look, s) {
         }), fps: 8, fade: false };
     }
 
+    case 'v': { // /vamp: a purple bat flapping on a blood-red sky
+      const up = ['........', '#......#', '##.##.##', '.######.', '..####..', '...##...', '........', '........'];
+      const down = ['........', '...##...', '..####..', '.######.', '##.##.##', '#......#', '........', '........'];
+      const at = (p) => grid((x, y) => (p[y][x] === '#' ? 2 : 1));
+      return { palette: [[0, 0, 0], [90, 0, 6], [110, 0, 160]], frames: [at(up), at(down)], fps: 4, fade: false };
+    }
+
+    case 'k': { // /frank: green face, the neck bolts sparking
+      const p = ['........', '.gggggg.', '.g.gg.g.', '.gggggg.', 'bggggggb', '.g....g.', '.gggggg.', '........'];
+      const at = (zap) => grid((x, y) => ({ g: 1, b: zap ? 3 : 2 })[p[y][x]] ?? 0);
+      return { palette: [[0, 0, 0], [60, 200, 50], [120, 120, 120], [255, 255, 120]],
+        frames: [at(false), at(false), at(true), at(false), at(true)], fps: 3, fade: false };
+    }
+
+    case 'f': { // /fish: tail flicking in deep blue, a bubble going up
+      const a = ['.......3', '........', '..111.1.', '.2111111', '.111111.', '..111.1.', '........', '.3......'];
+      const b = ['........', '.......3', '..111..1', '.211111.', '.1111111', '..111..1', '.3......', '........'];
+      const at = (p) => grid((x, y) => (p[y][x] === '.' ? 0 : Number(p[y][x])));
+      return { palette: [[0, 20, 60], [255, 140, 26], [0, 0, 0], [150, 200, 255]], frames: [at(a), at(b)], fps: 3, fade: false };
+    }
+
     case 'P': // sign off: a flatline across the middle, fading in and out
       return { palette: [[0, 0, 0], dim(WHITE, 0.12), WHITE],
         frames: [2, 1].map((c) => grid((x, y) => (y === 4 ? c : 0))), fps: 1, fade: true };
