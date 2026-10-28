@@ -536,6 +536,19 @@ function lookFramesRaw(look, s, w, h) {
         return cv.frame();
       }) };
     }
+    case 'u': { // /middle: a chrome cyber-hand flipping the bird, joints flashing magenta
+      const hand = ['....###.....', '....###.....', '....###.....', '....#*#.....', '....###.....',
+        '.##.###.##..', '.#*#####*#..', '##########..', '###########.', '.##########.',
+        '.#########..', '..#######...', '..#######...'];
+      return { ms: 220, frames: [0, 1, 0, 1].map((f) => {
+        const cv = canvas(w, h), ox = Math.round((w - 12) / 2), oy = 2 - f;
+        hand.forEach((row, y) => [...row].forEach((p, x) => {
+          if (p === '#') cv.set(ox + x, oy + y, [180, 185, 200]);
+          else if (p === '*') cv.set(ox + x, oy + y, f ? MAG : [70, 0, 40]);
+        }));
+        return cv.frame();
+      }) };
+    }
     case 'P': { // sign off: OFFLINE, dim, flickering like a dying screen
       const tx = Math.round((w - 27) / 2), ty = Math.round((h - 5) / 2);
       const plan = [1, 1, 1, 0.6, 1, 1, 0, 1, 'tear', 1];

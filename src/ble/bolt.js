@@ -234,6 +234,12 @@ export function lookAnimation(look, s) {
       return { palette: [[0, 20, 60], [255, 140, 26], [0, 0, 0], [150, 200, 255]], frames: [at(a), at(b)], fps: 3, fade: false };
     }
 
+    case 'u': { // /middle: the finger, chrome, flashing magenta
+      const p = ['...##...', '...##...', '...##...', '.#.##.#.', '.######.', '#######.', '.######.', '..####..'];
+      const at = (c) => grid((x, y) => (p[y][x] === '#' ? c : 0));
+      return { palette: [[0, 0, 0], [180, 185, 200], MAG], frames: [at(1), at(2)], fps: 3, fade: false };
+    }
+
     case 'P': // sign off: a flatline across the middle, fading in and out
       return { palette: [[0, 0, 0], dim(WHITE, 0.12), WHITE],
         frames: [2, 1].map((c) => grid((x, y) => (y === 4 ? c : 0))), fps: 1, fade: true };

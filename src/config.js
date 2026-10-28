@@ -137,6 +137,8 @@ export const EGGS = {
   vampire: { look: 'v', ms: 20000, rgb: [200, 0, 10], as: 'vamp' },
   frank: { look: 'k', ms: 20000, rgb: [60, 255, 40] },
   fish: { look: 'f', ms: 20000, rgb: [0, 150, 255] },
+  middle: { look: 'u', ms: 20000, rgb: [255, 43, 214] },
+  finger: { look: 'u', ms: 20000, rgb: [255, 43, 214], as: 'middle' },
   secret: { look: null, ms: 3000 },
 };
 

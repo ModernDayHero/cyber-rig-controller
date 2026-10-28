@@ -24,6 +24,7 @@
 #   v vampire  blood drips running down each side, the odd black bat cut (phone /vamp)
 #   k frank    green glow, blue-white sparks crackling                  (phone /frank)
 #   f fish     ocean blues rolling round, bubbles sparkling             (phone /fish)
+#   u middle   punchy magenta / red strobe, three jabs a second         (phone /middle)
 #   Q m        mute (2 bytes): m = 1 silences every sound, 0 lets them play
 #   N k s      alert (3 bytes) over whatever mode is running: k = c call (holo-call
 #              ring spinning round) / m message (three cyan flashes); s = 1 also beeps
@@ -69,7 +70,7 @@ BLOOD = (200, 0, 10)
 FRANK = (60, 255, 40)
 SEA, SEA2 = (0, 60, 255), (0, 200, 200)
 
-MODE_CHARS = "DXHhMRPAIFVWOrGJvkf"
+MODE_CHARS = "DXHhMRPAIFVWOrGJvkfu"
 PACKETS = {"C": 3, "B": 6, "S": 3, "Z": 8, "N": 2, "Q": 1}   # command -> number of data bytes that follow
 
 # Sounds. Segments: (start s, step s, notes Hz, side); the notes play one after
@@ -409,6 +410,11 @@ class Lens:
             if self.burst > 0 and random.random() > 0.7:
                 return (200, 220, 255)               # spark
             return scale(FRANK, 0.3 + 0.25 * math.sin(t * 2 + i * 0.6))
+        if m == "u":
+            p = (t * 3) % 1
+            if p < 0.3:
+                return MAG if int(t * 3) % 2 else RED
+            return scale(MAG, 0.06)
         if m == "f":
             if random.random() < 0.004:
                 return (180, 220, 255)               # bubble

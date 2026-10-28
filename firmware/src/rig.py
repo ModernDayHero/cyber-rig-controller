@@ -46,7 +46,8 @@
 #                                   (passed to the mask, kept in NVM across restarts)
 #                  P standby|off|wake
 #                  N c|m [text]     incoming call / message: mask lights + sound everywhere
-#                  X boo|pumpkin|vamp|frank|fish|secret   easter egg (20 s), then back to the mode
+#                  X boo|pumpkin|vamp|frank|fish|middle|secret [title]   easter egg (20 s),
+#                                   the title (/COMMAND) shown first, then back to the mode
 #                  Q 0|1            mute: 1 silences the CLUE and the mask (sent on connect)
 #                  H  start the hack     K  purge it     ?  report everything
 #   CLUE -> phone  M <set> <i> / C r g b r g b / R sp w dir / T min max / P on|waking|blink|off /
@@ -908,6 +909,8 @@ SOUNDS = {
     "v": ((0.0, 0.12, (A5, 784, A5, 0, 784, F5, E5, D5, 554, D5)),),
     # /frank: an electric zap, buzzing between a high and a low tone
     "k": ((0.0, 0.02, tuple((1800 if i % 2 else 300) + 37 * (i % 7) for i in range(40))),),
+    # /middle: a buzzing raspberry, sagging down
+    "u": ((0.0, 0.03, tuple(220 - 3 * i + (25 if i % 2 else 0) for i in range(30))),),
     # /fish: three runs of bubbles
     "f": ((0.0, 0.03, tuple(500 + 60 * i for i in range(10))),
           (0.45, 0.03, tuple(700 + 60 * i for i in range(10))),
@@ -978,6 +981,7 @@ EGGS = {
     "vamp":    (b"v", "v", "I VANT YOUR BLOOD", 0xC00010, 0),
     "frank":   (b"k", "k", "IT'S ALIVE!",       0x60E040, 0x081008),
     "fish":    (b"f", "f", "BLUB BLUB",         0x60C0FF, 0x001830),
+    "middle":  (b"u", "u", "THIS ONE'S FOR YOU", 0xFF008C, 0),
 }
 egg_bg = _pal(0)
 egg = displayio.Group()
@@ -1077,6 +1081,20 @@ def build_egg(k):
         for b in bubbles:
             g.append(b)
         return g, bubbles
+    if k == "middle":                                # a chrome cyber-hand, flipping the bird
+        chrome, glow = 0xB0B8C8, _pal(0xFF008C)
+        g.y = 140
+        g.append(_r(0x707888, 70, 40, -35, 60))      # wrist
+        g.append(_p(chrome, ((-48, 22), (-82, -8), (-70, -22), (-40, 2))))   # thumb
+        g.append(_r(chrome, 100, 70, -50, 0))        # palm
+        g.append(_r(chrome, 28, 100, -14, -96))      # the finger
+        g.append(_c(chrome, 14, 0, -96))
+        for kx in (-36, 30):                         # folded fingers
+            g.append(_c(chrome, 15, kx, -2))
+        g.append(_c(chrome, 11, 52, 4))
+        for gx, gy in ((-36, -2), (30, -2), (0, -60), (0, -20)):
+            g.append(_c(glow, 4, gx, gy))            # magenta joint lights
+        return g, [glow]
     return g, []
 
 def start_egg(k, title=""):
@@ -1127,6 +1145,10 @@ def egg_step(now):
     elif egg_k == "frank":               # sparks jump the neck bolts
         for z in egg_fx:
             z.hidden = random.random() > 0.25
+    elif egg_k == "middle":              # joint lights pulse, the hand jabs up on the beat
+        on = (now * 3) % 1 < 0.3
+        egg_fx[0][0] = 0xFF008C if on else 0x40002A
+        art.y = 134 if on else 140
     elif egg_k == "fish":                # swim, bubbles rise and wrap
         art.x = 120 + int(25 * math.sin(now * 0.8))
         for b in egg_fx:
