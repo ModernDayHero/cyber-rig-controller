@@ -788,18 +788,37 @@ export class SpotLed extends RigDevice {
     await this.showFrames(frames, { ms: 250 }, JSON.stringify(['title', text, color]));
   }
 
-  /** A message scrolling across: one frame wider than the hat, double-size letters,
-   *  scrolled by the hat's own scroll-left effect (no 20-frame limit on length). */
-  async showMessage(text, color) {
-    const { height: h } = this.info;
-    const fw = text.length * 8 + this.info.width;           // trailing gap before it loops
-    const px = new Uint8Array(fw * h), c = rgb323(color), y0 = Math.round((h - 10) / 2);
-    [...text].forEach((ch, i) => (FONT[ch] || []).forEach((row, y) => [...row].forEach((p, x) => {
-      if (p !== '#') return;
-      for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) px[(y0 + y * 2 + dy) * fw + i * 8 + x * 2 + dx] = c;
-    })));
-    this._shown = JSON.stringify(['msg', text, color]);
-    await this.send(encodeAnimation([{ px }], fw, h, { ms: 1000, effect: EFFECTS.indexOf('scroll left') }));
+  /** A message in pages: word-wrapped into lines of up to 8 characters, two lines a
+   *  page, each page held `ms`. The first word (MSG / CALL) in `head`, the rest in
+   *  `color`. Plain 32 x 16 frames: one frame wider than the hat doesn't display. */
+  async showMessage(text, color, head = [255, 43, 214], ms = 1500) {
+    const { width: w, height: h, frameLimit } = this.info;
+    const per = Math.floor((w + 1) / 4);                    // characters per line (8)
+    const lines = [];
+    for (const word of text.split(' ').filter(Boolean)) {
+      for (let i = 0; i < word.length; i += per) {          // over-long words get split
+        const part = word.slice(i, i + per), last = lines[lines.length - 1];
+        if (i === 0 && last !== undefined && last.length + 1 + part.length <= per) lines[lines.length - 1] += ' ' + part;
+        else lines.push(part);
+      }
+    }
+    const pages = [];
+    for (let i = 0; i < lines.length && pages.length < frameLimit; i += 2) pages.push(lines.slice(i, i + 2));
+    let first = true;
+    const frames = pages.map((pg) => {
+      const cv = canvas(w, h);
+      pg.forEach((line, row) => {
+        const x = Math.round((w - (line.length * 4 - 1)) / 2), y = row ? 9 : 2;
+        if (first) {                                        // MSG / CALL stands out
+          const [hd, ...rest] = line.split(' ');
+          drawText(cv, hd, x, y, head);
+          if (rest.length) drawText(cv, ' ' + rest.join(' '), x + hd.length * 4, y, color);
+          first = false;
+        } else drawText(cv, line, x, y, color);
+      });
+      return cv.frame();
+    });
+    await this.showFrames(frames, { ms }, JSON.stringify(['msg', text, color]));
   }
 
   /** Follow the rig: the look's animation at the hat's brightness. */
