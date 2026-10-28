@@ -2,7 +2,7 @@
 # Cyber headgear configurator). 10 NeoPixels per intake.
 #
 # Mode bytes (sent by the CLUE):
-#   D dark     purple slow breathing          I = alias for D (idle)
+#   D dark     dark purple, a brighter arc slowly circling   I = alias for D (idle)
 #   X glitch   magenta + cyan bursts and cutouts
 #   H hunt     red scanner sweep               h = heartbeat pulse
 #   r rain     blue drops running down both sides, white lightning flashes
@@ -19,6 +19,10 @@
 #   O off      all pixels off
 #   A audio    mic VU meter: both sides fill from the bottom,
 #              green -> yellow -> red at the top, with a falling peak dot
+#   G ghost    dim white wisps drifting round, the odd "boo" flare      (phone /boo)
+#   J pumpkin  orange candle flicker, a yellow core where it burns hot  (phone /pumpkin)
+#   N k s      alert (3 bytes) over whatever mode is running: k = c call (holo-call
+#              ring spinning round) / m message (three cyan flashes); s = 1 also beeps
 
 import math
 import random
@@ -53,8 +57,34 @@ def wheel(h):
     q, u = int(255 * (1 - f)), int(255 * f)
     return [(255, u, 0), (q, 255, 0), (0, 255, u), (0, q, 255), (u, 0, 255), (255, 0, q)][i % 6]
 
-MODE_CHARS = "DXHhMRPAIFVWOr"
-PACKETS = {"C": 3, "B": 6, "S": 3, "Z": 8}   # command -> number of data bytes that follow
+GHOST = (150, 160, 200)
+ORANGE = (255, 80, 0)
+CANDLE = (255, 170, 20)
+
+MODE_CHARS = "DXHhMRPAIFVWOrGJ"
+PACKETS = {"C": 3, "B": 6, "S": 3, "Z": 8, "N": 2}   # command -> number of data bytes that follow
+
+# Sounds. Segments: (start s, step s, notes Hz, side); the notes play one after
+# another, step each, 0 = rest. side 0 = left, 1 = right, 2 = both.
+#   m  message: harmonic chirps, quick arpeggios up the harmonic series of C5
+#      (523 Hz x 2, 3, 4 ...), pinging left -> right -> both
+#   c  call: a dark synth ringtone in A (phrygian: the B-flat is the menace), twice
+#   a  alarm, when the virus takes over: siren whoop, hi-lo "danger danger", whoop
+H3, H4, H5, H6, H8 = 1569, 2093, 2616, 3139, 4186
+A4, BB4, A5, BB5, C6, D6, E6, A6 = 440, 466, 880, 932, 1047, 1175, 1319, 1760
+D5, E5, F5 = 587, 659, 698
+RINGTONE = (A5, A4, A5, C6, BB5, A5, E5, 0, A5, A4, A5, C6, E6, D6, C6, BB5,
+            A5, A4, A5, C6, BB5, A5, E5, 0, F5, E5, D5, E5, A5, 0, A6, 0)
+WHOOP = tuple(400 + 80 * i for i in range(16))       # 400 -> 1600 Hz, stepped
+SOUNDS = {
+    "m": ((0.00, 0.025, (H3, H4, H5, H6), 0),       # left: up the series
+          (0.14, 0.025, (H4, H5, H6, H8), 1),       # right answers, a step higher
+          (0.28, 0.04, (H6, H8, H6, H8), 2)),       # both: sparkle
+    "c": ((0.0, 0.07, RINGTONE, 2), (2.8, 0.07, RINGTONE, 2)),
+    "a": ((0.0, 0.03, WHOOP, 2), (0.55, 0.15, (1568, 1046) * 4, 2), (1.85, 0.03, WHOOP, 2)),
+}
+ALERT_TIME = {"m": 1.0, "c": 5.2}   # seconds the lights show the alert
+RING = 2.8                          # call: one ringtone (2.24 s) plus a breath
 
 class Parser:
     """Turns a byte stream into commands. Handles C/B packets split across reads."""
@@ -102,6 +132,52 @@ class Mic:
         lo, hi = math.log(self.floor), math.log(self.top)
         return max(0.0, min(1.0, (math.log(rms) - lo) / (hi - lo)))
 
+class Buzzer:
+    """Onboard speaker as a PWM tone, stepped from Lens.update() so the LEDs never stall."""
+    def __init__(self, side):
+        import board
+        import digitalio
+        import pwmio
+        self.side = side          # 0 left, 1 right: which SOUNDS segments are ours
+        self.pwm = pwmio.PWMOut(board.SPEAKER, frequency=2000, duty_cycle=0,
+                                variable_frequency=True)
+        self.en = None
+        if hasattr(board, "SPEAKER_ENABLE"):   # the Bluefruit's amp has an enable pin
+            self.en = digitalio.DigitalInOut(board.SPEAKER_ENABLE)
+            self.en.switch_to_output(False)
+        self.segs = None
+        self.t0 = 0.0
+        self.hz = 0
+
+    def play(self, kind):
+        self.segs = SOUNDS.get(kind)
+        self.t0 = time.monotonic()
+
+    def _tone(self, hz):
+        if hz == self.hz:
+            return
+        self.hz = hz
+        if hz:
+            self.pwm.frequency = hz
+        self.pwm.duty_cycle = 0x8000 if hz else 0
+        if self.en:
+            self.en.value = bool(hz)
+
+    def update(self, now):
+        if not self.segs:
+            return
+        f = now - self.t0
+        hz = 0
+        for s0, step, notes, side in self.segs:
+            i = int((f - s0) / step)
+            if 0 <= f - s0 and i < len(notes) and side in (2, self.side):
+                hz = notes[i]
+                break
+        s0, step, notes, _ = self.segs[-1]
+        if f > s0 + step * len(notes):
+            self.segs = None
+        self._tone(hz)
+
 # VU layout: on a Circuit Playground, pixels 0-4 run down one side and 5-9 up the other.
 # Index lists go bottom -> top. Swap them if an intake board is mounted upside down.
 VU_LEFT = (4, 3, 2, 1, 0)
@@ -109,8 +185,11 @@ VU_RIGHT = (5, 6, 7, 8, 9)
 VU_COLORS = ((0, 255, 40), (90, 255, 0), (255, 200, 0), (255, 110, 0), (255, 0, 0))
 
 class Lens:
-    def __init__(self, pixels, key, mic=None):
+    def __init__(self, pixels, key, mic=None, buzz=None):
         self.mic = mic            # Mic() enables mode A
+        self.buzz = buzz          # Buzzer() lets alerts beep
+        self.alert_k = None       # N alert showing over the mode: "c" / "m"
+        self.alert_t = 0.0
         self.vu = 0.0
         self.peak = 0.0
         self.peak_t = 0.0
@@ -153,6 +232,8 @@ class Lens:
         elif m == "Z":
             k = chr(data[0])
             self.tune[k] = (data[1] / 100, tuple(data[2:5]), tuple(data[5:8]))
+        elif m == "N":
+            self.alert(chr(data[0]), data[1])
         else:
             self.set_mode(m)
 
@@ -164,11 +245,40 @@ class Lens:
             return encode("B", self.pair)
         return encode(self.mode, None)
 
+    def alert(self, k, sound):
+        """Call / message over the current mode; the mode carries on underneath."""
+        if k not in ALERT_TIME:
+            return
+        self.alert_k, self.alert_t = k, time.monotonic()
+        if sound and self.buzz:
+            self.buzz.play(k)
+
+    def alerting(self):
+        return self.alert_k is not None or bool(self.buzz and self.buzz.segs)
+
+    def _alert_pixel(self, i, f):
+        if self.alert_k == "c":
+            # holo-call: a cyan arc with a white head spins round the ring (the two
+            # sides spin opposite ways), bright while it rings, dim between rings
+            idx = N - 1 - i if self.key % 2 else i
+            d = ((f * N * 1.6) - idx) % N             # 0 = head, rising = trail
+            if d < 1:
+                return WHITE
+            k = max(0.0, 1 - d / 5) ** 1.5
+            ring = 1.0 if f % RING < 2.24 else 0.3
+            return scale(CYAN, 0.05 + 0.95 * k * ring)
+        # message: three cyan flashes on the chirps, then the glow fades out
+        if f < 0.56:
+            return CYAN if f % 0.14 < 0.07 else scale(CYAN, 0.1)
+        return scale(CYAN, (1 - (f - 0.56) / (ALERT_TIME["m"] - 0.56)) * 0.6)
+
     def set_mode(self, m):
         if m == "I":
             m = "D"
         if m != self.mode:
             self.t0 = time.monotonic()
+            if m == "F" and self.buzz:
+                self.buzz.play("a")       # the virus owns the rig: sound the alarm
         self.mode = m
 
     def _glitch_clock(self, dt):
@@ -189,7 +299,11 @@ class Lens:
     def _pixel(self, i, t):
         m, key = self.mode, self.key
         if m == "D":
-            return scale(self._col("D", 0, PURPLE), breath(t - i / N * 0.8))
+            # dark purple with a brighter arc slowly circling (no breathing);
+            # the two intakes turn opposite ways
+            idx = N - 1 - i if key % 2 else i
+            d = (t * 0.25 * N - idx) % N            # 0.25 turns a second
+            return scale(self._col("D", 0, PURPLE), 0.12 + 0.88 * max(0.0, 1 - d / 4) ** 2)
         if m == "C":
             # quick white flash on lock, then breathe in the scanned color
             f = time.monotonic() - self.t0
@@ -236,7 +350,7 @@ class Lens:
                 return (mg if random.random() > 0.5 else cy) if r > 0.3 else OFF
             return scale(mg, 0.85) if r > 0.93 else scale(cy, 0.22)
         if m == "h":
-            return scale(RED, 0.06 + 0.94 * heart(t))
+            return scale(self._col("h", 0, RED), 0.06 + 0.94 * heart(t))
         if m in ("H", "F", "V"):
             idx = N - 1 - i if key % 2 else i
             pos = (t * N * 0.45) % N
@@ -257,6 +371,15 @@ class Lens:
         if m == "R":
             x = (i / N) * 0.5 + key * 0.5          # left intake leads, right follows
             return wheel(x * self.rb[1] / 100 - self.rb_phase)
+        if m == "G":
+            if t < self.flash:                       # boo!
+                return scale(GHOST, 0.9)
+            w = 0.5 + 0.5 * math.sin(t * 1.3 + i * 0.9 + key * 2.0)
+            return scale(GHOST, 0.04 + 0.3 * w ** 3)
+        if m == "J":
+            k = 0.7 + 0.15 * math.sin(t * 13 + i) + 0.15 * math.sin(t * 7.3 + i * 2.1 + key)
+            c = ORANGE if k < 0.85 else CANDLE        # hot moments burn yellow
+            return scale(c, k)
         if m == "P":
             f = time.monotonic() - self.t0
             if f < 0.4:
@@ -265,7 +388,7 @@ class Lens:
                 k = 1
             else:
                 k = max(0, 1 - ((f - 1.6) / 4) ** 0.8)
-            return scale(WHITE, k)
+            return scale(self._col("P", 0, WHITE), k)
         return OFF
 
     def _vu(self, now, dt):
@@ -295,6 +418,16 @@ class Lens:
         now = time.monotonic()
         dt = min(0.05, now - self.last)
         self.last = now
+        if self.buzz:
+            self.buzz.update(now)
+        if self.alert_k:
+            f = now - self.alert_t
+            if f < ALERT_TIME[self.alert_k]:
+                for i in range(N):
+                    self.px[i] = self._alert_pixel(i, f)
+                self.px.show()
+                return
+            self.alert_k = None
         if self.mode == "A":
             self._vu(now, dt)
             return
@@ -302,6 +435,8 @@ class Lens:
         if self.mode == "r" and now > self.flash + 1.5 and random.random() < 0.006:
             self.flash = now + 0.06 + random.random() * 0.18   # lightning
             self.flash_c = self._col("r", 0, MAG) if random.random() > 0.5 else self._col("r", 1, CYAN)
+        if self.mode == "G" and now > self.flash + 2 and random.random() < 0.006:
+            self.flash = now + 0.15                         # ghost: boo
         if self.mode == "R":                 # integrate, so speed changes stay smooth
             sp, _, fwd = self.rb
             self.rb_phase += dt * 0.06 * sp / 50 * (1 if fwd else -1)

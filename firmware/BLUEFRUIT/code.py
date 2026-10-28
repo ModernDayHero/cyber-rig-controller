@@ -6,7 +6,8 @@
 # Side: settings.toml on each board,  RIG_SIDE = "L"  or  RIG_SIDE = "R"
 # Buttons: A = next mode (local backup), B = virus  (this side only)
 # Commands: one mode byte, C + 3 bytes RGB (scanned color),
-#           or B + 6 bytes (rebreather: breathe between two colors)
+#           B + 6 bytes (rebreather: breathe between two colors),
+#           or N kind sound (call / message alert; see leds.py)
 
 import os
 import time
@@ -16,14 +17,15 @@ import neopixel
 from adafruit_ble import BLERadio
 from adafruit_ble.advertising.standard import ProvideServicesAdvertisement
 from adafruit_ble.services.nordic import UARTService
-from leds import Lens, Mic, Parser
+from leds import Buzzer, Lens, Mic, Parser
 
 SIDE = "R" if os.getenv("RIG_SIDE", "L").upper().startswith("R") else "L"
 BRIGHTNESS = 0.3   # heat + battery rule
 MODES = "DXrMAR"    # local backup: CLUE OS modes, then VU + rainbow
 
 px = neopixel.NeoPixel(board.NEOPIXEL, 10, brightness=BRIGHTNESS, auto_write=False)
-lens = Lens(px, key=0 if SIDE == "L" else 1, mic=Mic())
+KEY = 0 if SIDE == "L" else 1
+lens = Lens(px, key=KEY, mic=Mic(), buzz=Buzzer(KEY))
 
 ble = BLERadio()
 ble.name = "RB-" + SIDE
@@ -77,4 +79,4 @@ while True:
     a_prev, b_prev = a, b
 
     lens.update()
-    time.sleep(0.02)
+    time.sleep(0.005 if lens.alerting() else 0.02)   # quicker steps keep the beeps smooth

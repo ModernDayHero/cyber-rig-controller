@@ -44,9 +44,11 @@
 #                  S k b r g b r g b  tune mode k: brightness % + main / accent colour
 #                                   (passed to the mask, kept in NVM across restarts)
 #                  P standby|off|wake
+#                  N c|m [text]     incoming call / message: mask lights + sound everywhere
+#                  X boo|pumpkin|secret   easter-egg sequence (~12 s), then back to the mode
 #                  H  start the hack     K  purge it     ?  report everything
 #   CLUE -> phone  M <set> <i> / C r g b r g b / R sp w dir / T min max / P on|waking|blink|off /
-#                  V 0|1 (hacked) / L 0|1 (Bluefruit link), sent on every change
+#                  V 0|1 (hacked) / L 0|1 0|1 (left / right Bluefruit links), sent on every change
 #   While hacked the phone's M/C are refused like the buttons; K still purges.
 #
 # Big sprite frames: 0 rest, 1 wiggle A, 2 wiggle B, 3 angry,
@@ -63,6 +65,7 @@ import rtc
 import vectorio
 import microcontroller
 import audiobusio
+import pwmio
 import board
 import digitalio
 import displayio
@@ -89,6 +92,7 @@ SETS = {
         (b"X", "GLITCH",     MAGENTA,  "term"),
         (b"r", "RAINFALL",   0xB040FF, "term"),   # purple/magenta/cyan rain + lightning
         (b"M", "MATRIX",     GREEN,    "term"),
+        (b"h", "HEARTBEAT",  RED,      "term"),     # red lub-dub pulse
     ],
     "alt": [
         (b"A", "AUDIO VU",   0xFFC800, "vu"),
@@ -96,6 +100,7 @@ SETS = {
         (None, "REBREATHER", CYAN,     "breathe"),
         (b"H", "HACK",       RED,      "term"),     # on demand: releases the virus
         (b"D", "WATCH",      0x39B6C0, "watch"),    # clock face; the rig runs Dark meanwhile
+        (b"P", "SIGN OFF",   WHITE,    "term"),     # rig flares white, then fades out
     ],
 }
 SET_NAMES = {"os": "STEAMWorkz OS", "alt": "ALT"}
@@ -766,6 +771,12 @@ def phone_cmd(w):
             go_waking()
     elif power != "on":
         phone_say("E asleep")
+    elif c == "N":                         # calls get through even while hacked
+        if w[1] in ALERT_TIME:
+            alert(w[1], " ".join(w[2:]))
+    elif c == "X":
+        if w[1] in ("boo", "pumpkin", "secret"):
+            start_egg(w[1])
     elif c == "K":
         if mode != "idle":
             term_push("> REMOTE PURGE // phone", CYAN)
@@ -867,6 +878,132 @@ p0_since = None
 p0_done = False
 last_count = -1
 p1_prev = p2_prev = False
+
+# ---------- alerts: incoming call / message (phone N) ----------
+# The mask's leds.py SOUNDS, all of them in one speaker: (start s, step s, notes Hz),
+# 0 = rest. m = harmonic chirps (up the harmonic series of C5), c = synth ringtone
+# in A phrygian, a = the takeover alarm (whoop, hi-lo "danger danger", whoop).
+H3, H4, H5, H6, H8 = 1569, 2093, 2616, 3139, 4186
+A4, BB4, A5, BB5, C6, D6, E6, A6 = 440, 466, 880, 932, 1047, 1175, 1319, 1760
+D5, E5, F5 = 587, 659, 698
+RINGTONE = (A5, A4, A5, C6, BB5, A5, E5, 0, A5, A4, A5, C6, E6, D6, C6, BB5,
+            A5, A4, A5, C6, BB5, A5, E5, 0, F5, E5, D5, E5, A5, 0, A6, 0)
+WHOOP = tuple(400 + 80 * i for i in range(16))
+SOUNDS = {
+    "m": ((0.0, 0.025, (H3, H4, H5, H6)), (0.14, 0.025, (H4, H5, H6, H8)),
+          (0.28, 0.04, (H6, H8, H6, H8))),
+    "c": ((0.0, 0.07, RINGTONE), (2.8, 0.07, RINGTONE)),
+    "a": ((0.0, 0.03, WHOOP), (0.55, 0.15, (1568, 1046) * 4), (1.85, 0.03, WHOOP)),
+    "g": ((0.0, 0.04, tuple(300 + 5 * i for i in range(30))),),     # /boo: a rising wooo
+    "p": ((0.0, 0.12, (A4, 523, E5, 622, 523, A4, 0, 330)),),     # /pumpkin: spooky arpeggio
+}
+ALERT_TIME = {"m": 1.0, "c": 5.2}
+speaker = pwmio.PWMOut(board.SPEAKER, frequency=2000, duty_cycle=0, variable_frequency=True)
+tone_segs = None
+tone_t = 0.0
+alert_k = None
+alert_end = 0.0
+
+def play(k):
+    global tone_segs, tone_t
+    tone_segs, tone_t = SOUNDS[k], time.monotonic()
+
+def tone_step(now):
+    """Play the next phrase once its time comes (called every loop). The notes are
+    shorter than one loop, so each phrase plays straight through, the screen
+    pulsing to the beat meanwhile."""
+    global tone_segs
+    if not tone_segs or now - tone_t < tone_segs[0][0]:
+        return
+    _, step, notes = tone_segs[0]
+    for i, hz in enumerate(notes):
+        if hz:
+            speaker.frequency = hz
+        speaker.duty_cycle = 0x8000 if hz else 0
+        if step >= 0.07:
+            display.brightness = 1.0 if i % 4 < 2 else 0.4
+        time.sleep(step)
+    speaker.duty_cycle = 0
+    display.brightness = 1.0
+    tone_segs = tone_segs[1:] or None
+
+def alert(k, text):
+    """Incoming call / message: lights + sound on the mask, sound on the CLUE too."""
+    global alert_k, alert_end
+    send(b"N" + k.encode() + b"\x01")
+    play(k)
+    alert_k, alert_end = k, time.monotonic() + ALERT_TIME[k]
+    text = text[:T_COLS - 20]
+    if k == "c":
+        term_push("!! INCOMING CALL", CYAN)
+        term_push("> CALLER ID // " + (text or "0x{:04X}".format(random.randrange(65536))), CYAN)
+    else:
+        term_push("> MSG // " + (text or "1 new packet"), CYAN)
+
+# ---------- easter eggs (phone X): /boo, /pumpkin, /secret ----------
+# A full-screen overlay on top of everything; the mask runs G / J meanwhile,
+# then everything goes back to the mode it was in.
+EGG_TIME = 12.0
+GHOST_C, ORANGE, STEM, CANDLE = 0xA0A8C8, 0xFF5A00, 0x2E8B2E, 0xFFC020
+egg = displayio.Group()
+egg.append(vectorio.Rectangle(pixel_shader=_pal(0), width=240, height=240, x=0, y=0))
+ghost = displayio.Group(x=120, y=110)
+for gx in (-40, 0, 40):                              # wavy hem
+    ghost.append(vectorio.Circle(pixel_shader=_pal(GHOST_C), radius=21, x=gx, y=58))
+ghost.append(vectorio.Rectangle(pixel_shader=_pal(GHOST_C), width=122, height=60, x=-61, y=0))
+ghost.append(vectorio.Circle(pixel_shader=_pal(GHOST_C), radius=61, x=0, y=0))
+for gx in (-22, 22):
+    ghost.append(vectorio.Circle(pixel_shader=_pal(0), radius=11, x=gx, y=-8))
+ghost.append(vectorio.Circle(pixel_shader=_pal(0), radius=9, x=0, y=26))    # "ooo"
+pumpkin = displayio.Group(x=120, y=135)
+face = _pal(CANDLE)                                  # one palette: the candle flickers all of it
+pumpkin.append(vectorio.Rectangle(pixel_shader=_pal(STEM), width=16, height=30, x=-8, y=-88))
+for gx, r in ((-45, 55), (45, 55), (0, 65)):
+    pumpkin.append(vectorio.Circle(pixel_shader=_pal(ORANGE), radius=r, x=gx, y=0))
+for pts in (((-48, -12), (-18, -12), (-33, -38)), ((18, -12), (48, -12), (33, -38)),
+            ((-9, 10), (9, 10), (0, -4)),
+            ((-50, 20), (-36, 31), (-24, 22), (-12, 33), (0, 24), (12, 33), (24, 22),
+             (36, 31), (50, 20), (38, 46), (-38, 46))):
+    pumpkin.append(vectorio.Polygon(pixel_shader=face, points=list(pts), x=0, y=0))
+egg_txt = make_text(20, 0, 4, GHOST_C, scale=2)
+egg.append(ghost)
+egg.append(pumpkin)
+egg.append(egg_txt[0])
+egg.hidden = True
+root.append(egg)
+egg_k = None
+egg_end = 0.0
+
+def start_egg(k):
+    global egg_k, egg_end
+    egg_k, egg_end = k, time.monotonic() + EGG_TIME
+    if k == "secret":                    # no picture: a refusal, loudly
+        egg_end = time.monotonic() + 3.0
+        send(b"X")
+        term_push("!! ACCESS DENIED // clearance: STEAMWorkz", RED)
+        term_glitch(3)
+        return
+    boo = k == "boo"
+    send(b"G" if boo else b"J")
+    ghost.hidden, pumpkin.hidden = not boo, boo
+    egg_txt[2][1] = GHOST_C if boo else ORANGE
+    set_text(egg_txt[1], "{:^20}".format("BOO." if boo else "TRICK OR TREAT"))
+    egg.hidden = False
+    play("g" if boo else "p")
+
+def egg_step(now):
+    global egg_k
+    if not egg_k:
+        return
+    if now > egg_end:
+        egg_k = None
+        egg.hidden = True
+        resend()
+    elif egg_k == "boo":                 # drift and bob
+        ghost.x = 120 + int(14 * math.sin(now * 0.9))
+        ghost.y = 120 + int(10 * math.sin(now * 2.2))
+    elif egg_k == "pumpkin":             # candle flicker
+        face[0] = CANDLE if random.random() > 0.2 else 0xFF8A00
 
 def wheel(h):
     """0..1 hue -> saturated 0xRRGGBB."""
@@ -1068,6 +1205,7 @@ while True:
     now = time.monotonic()
     t += 1
 
+    tone_step(now)
     if t % 4 == 0:
         link_step(now)
         phone_step(now)
@@ -1118,6 +1256,17 @@ while True:
                 shut_down()
         time.sleep(0.05)
         continue
+
+    # alert: the screen flashes with it (fast for a message, with the rings for a call)
+    if alert_k:
+        if now < alert_end:
+            f = now - (alert_end - ALERT_TIME[alert_k])
+            on = (f % 2.8 < 2.24 and f % 0.3 < 0.15) if alert_k == "c" else f % 0.14 < 0.07
+            display.brightness = 1.0 if on else 0.35
+        else:
+            alert_k = None
+            display.brightness = 1.0
+    egg_step(now)
 
     # pad 1 tap: STEAMWorkz OS <-> ALT
     p1 = set_pad.value
@@ -1282,7 +1431,8 @@ while True:
                 m[3], m[4] = random.uniform(-3, 3), random.uniform(-3, 3)
             icon.scale, icon.x, icon.y = 3, 24, 24
             mode, phase_t = "takeover", now
-            resend()                # rebreather: hunt sweep + glitch stabs
+            resend()                # rebreather: hunt sweep + glitch stabs (and its alarm)
+            play("a")
             for _ in range(12):
                 term_push(fill(random.choice(VIRUS_TEXT)), RED)
 
