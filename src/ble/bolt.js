@@ -234,6 +234,10 @@ export function lookAnimation(look, s) {
       return { palette: [[0, 20, 60], [255, 140, 26], [0, 0, 0], [150, 200, 255]], frames: [at(a), at(b)], fps: 3, fade: false };
     }
 
+    case 'c': // /boobs, /dick ...: a censor bar across the middle, blinking
+      return { palette: [[0, 0, 0], MAG, dim(MAG, 0.2)],
+        frames: [1, 2].map((c) => grid((x, y) => (y >= 2 && y <= 5 ? c : 0))), fps: 6, fade: false };
+
     case 'u': { // /middle: the finger, chrome, flashing magenta
       const p = ['...##...', '...##...', '...##...', '.#.##.#.', '.######.', '#######.', '.######.', '..####..'];
       const at = (c) => grid((x, y) => (p[y][x] === '#' ? c : 0));

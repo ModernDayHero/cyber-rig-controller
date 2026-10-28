@@ -536,6 +536,15 @@ function lookFramesRaw(look, s, w, h) {
         return cv.frame();
       }) };
     }
+    case 'c': { // /boobs, /dick ...: a hot-pink CENSORED bar, jittering
+      return { ms: 150, frames: [0, 0, 1, 0, -1, 0].map((dx, f) => {
+        const cv = canvas(w, h);
+        for (let y = 4; y < 12; y++) for (let x = 0; x < w; x++) cv.set(x, y, MAG);
+        drawText(cv, 'CENSORED', 1 + dx, 5, BLACK);
+        if (f === 2) cv.rowShift(7, 3);
+        return cv.frame();
+      }) };
+    }
     case 'u': { // /middle: a chrome cyber-hand flipping the bird, joints flashing magenta
       const hand = ['....###.....', '....###.....', '....###.....', '....#*#.....', '....###.....',
         '.##.###.##..', '.#*#####*#..', '##########..', '###########.', '.##########.',

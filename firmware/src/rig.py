@@ -909,6 +909,8 @@ SOUNDS = {
     "v": ((0.0, 0.12, (A5, 784, A5, 0, 784, F5, E5, D5, 554, D5)),),
     # /frank: an electric zap, buzzing between a high and a low tone
     "k": ((0.0, 0.02, tuple((1800 if i % 2 else 300) + 37 * (i % 7) for i in range(40))),),
+    # censored: the TV bleep
+    "b": ((0.0, 0.8, (1000,)),),
     # /middle: a buzzing raspberry, sagging down
     "u": ((0.0, 0.03, tuple(220 - 3 * i + (25 if i % 2 else 0) for i in range(30))),),
     # /fish: three runs of bubbles
@@ -982,6 +984,7 @@ EGGS = {
     "frank":   (b"k", "k", "IT'S ALIVE!",       0x60E040, 0x081008),
     "fish":    (b"f", "f", "BLUB BLUB",         0x60C0FF, 0x001830),
     "middle":  (b"u", "u", "THIS ONE'S FOR YOU", 0xFF008C, 0),
+    "censor":  (b"c", "b", "NICE TRY, CHOOM",   0xFF2BD6, 0),   # /boobs /dick ... (the phone maps them)
 }
 egg_bg = _pal(0)
 egg = displayio.Group()
@@ -1095,6 +1098,14 @@ def build_egg(k):
         for gx, gy in ((-36, -2), (30, -2), (0, -60), (0, -20)):
             g.append(_c(glow, 4, gx, gy))            # magenta joint lights
         return g, [glow]
+    if k == "censor":                                # a glitching CENSORED bar
+        g.y = 120
+        g.append(_r(0xFF2BD6, 220, 76, -110, -38))
+        g.append(_r(0, 212, 68, -106, -34))
+        word = make_text(8, -72, -21, 0xFF2BD6, scale=3)   # 8 x 18 px = 144 wide
+        set_text(word[1], "CENSORED")
+        g.append(word[0])
+        return g, []
     return g, []
 
 def start_egg(k, title=""):
@@ -1145,6 +1156,8 @@ def egg_step(now):
     elif egg_k == "frank":               # sparks jump the neck bolts
         for z in egg_fx:
             z.hidden = random.random() > 0.25
+    elif egg_k == "censor":              # the bar glitches sideways now and then
+        art.x = 120 + (random.choice((-6, 4, 8)) if random.random() < 0.15 else 0)
     elif egg_k == "middle":              # joint lights pulse, the hand jabs up on the beat
         on = (now * 3) % 1 < 0.3
         egg_fx[0][0] = 0xFF008C if on else 0x40002A

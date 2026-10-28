@@ -139,6 +139,9 @@ export const EGGS = {
   fish: { look: 'f', ms: 20000, rgb: [0, 150, 255] },
   middle: { look: 'u', ms: 20000, rgb: [255, 43, 214] },
   finger: { look: 'u', ms: 20000, rgb: [255, 43, 214], as: 'middle' },
+  // Adult party: people will try these. They all get censored (not on the hint list).
+  ...Object.fromEntries(['boobs', 'dick', 'nudes', 'porn', 'sex'].map((n) =>
+    [n, { look: 'c', ms: 20000, rgb: [255, 43, 214], as: 'censor' }])),
   secret: { look: null, ms: 3000 },
 };
 

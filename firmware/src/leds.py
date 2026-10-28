@@ -25,6 +25,7 @@
 #   k frank    green glow, blue-white sparks crackling                  (phone /frank)
 #   f fish     ocean blues rolling round, bubbles sparkling             (phone /fish)
 #   u middle   punchy magenta / red strobe, three jabs a second         (phone /middle)
+#   c censor   fast hot-pink strobe                        (phone /boobs, /dick ...)
 #   Q m        mute (2 bytes): m = 1 silences every sound, 0 lets them play
 #   N k s      alert (3 bytes) over whatever mode is running: k = c call (holo-call
 #              ring spinning round) / m message (three cyan flashes); s = 1 also beeps
@@ -70,7 +71,7 @@ BLOOD = (200, 0, 10)
 FRANK = (60, 255, 40)
 SEA, SEA2 = (0, 60, 255), (0, 200, 200)
 
-MODE_CHARS = "DXHhMRPAIFVWOrGJvkfu"
+MODE_CHARS = "DXHhMRPAIFVWOrGJvkfuc"
 PACKETS = {"C": 3, "B": 6, "S": 3, "Z": 8, "N": 2, "Q": 1}   # command -> number of data bytes that follow
 
 # Sounds. Segments: (start s, step s, notes Hz, side); the notes play one after
@@ -410,6 +411,8 @@ class Lens:
             if self.burst > 0 and random.random() > 0.7:
                 return (200, 220, 255)               # spark
             return scale(FRANK, 0.3 + 0.25 * math.sin(t * 2 + i * 0.6))
+        if m == "c":
+            return MAG if (t * 8) % 1 < 0.5 else scale(MAG, 0.12)
         if m == "u":
             p = (t * 3) % 1
             if p < 0.3:
