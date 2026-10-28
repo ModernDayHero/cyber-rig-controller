@@ -116,13 +116,15 @@ export class Rig extends EventTarget {
   }
 
   _update(patch) {
-    const before = this._rigSig();
+    const before = this._rigSig(), wasHacked = this.state.hacked;
     Object.assign(this.state, patch);
     this._save();
     this.dispatchEvent(new CustomEvent('change', { detail: this.state }));
+    // The virus takes over the hat and BOLT even on OWN content, and gives it back on purge.
+    const takeover = this.state.hacked !== wasHacked;
     if (this._rigSig() !== before) {
-      if (this.state.bolt.follow) this.pushBolt();
-      if (this.state.hat.follow) this.pushCap();
+      if (this.state.bolt.follow || takeover) this.pushBolt();
+      if (this.state.hat.follow || takeover) this.pushCap();
       else if (!look(this.state).on) this.pushCap();      // standby/off still blanks it
     }
   }
@@ -139,7 +141,7 @@ export class Rig extends EventTarget {
     const b = this.state.bolt;
     const lk = look(this.state);
     // Standby / off always wins, so the whole rig goes dark together; an egg takes over too.
-    if (b.follow || !lk.on || this.state.egg) {
+    if (b.follow || !lk.on || this.state.egg || this.state.hacked) {
       this.bolt.applyState({ ...this.state, brightness: b.brightness, look: lk });
     } else {
       const c = b.content.type === 'image' && this.boltImage ? { type: 'image', anim: this.boltImage } : b.content;
@@ -149,9 +151,10 @@ export class Rig extends EventTarget {
 
   pushCap() {
     if (!this.cap.available) return;      // the hat connects on demand
-    if (this.hatMsg && !this.state.egg) return;   // a message is scrolling: it puts the look back after
+    // A message is scrolling: it puts the look back after (an egg or the virus cut in).
+    if (this.hatMsg && !this.state.egg && !this.state.hacked) return;
     const h = this.state.hat, lk = look(this.state);
-    if (h.follow || !lk.on || !this.hatImage || this.state.egg) {
+    if (h.follow || !lk.on || !this.hatImage || this.state.egg || this.state.hacked) {
       this.cap.applyState({ ...this.state, look: lk });
     } else {
       this.cap.showFrames(this.hatImage, { ms: h.ms, effect: h.effect, speed: 0 },
