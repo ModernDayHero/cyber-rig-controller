@@ -1,0 +1,27 @@
+{
+  "folders": [
+    {
+      "name": "cyber-rig-controller",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/node_modules": true
+    },
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/dist": true,
+      "**/dev-dist": true,
+      "**/package-lock.json": true
+    },
+    "files.watcherExclude": {
+      "**/node_modules/**": true,
+      "**/dist/**": true,
+      "**/dev-dist/**": true
+    }
+  },
+  "extensions": {
+    "recommendations": []
+  }
+}
