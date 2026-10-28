@@ -68,7 +68,7 @@ h1{font:700 clamp(22px,4vw,30px)/1.1 var(--display);margin:0;letter-spacing:.02e
 <div class="wrap">
   <header>
     <h1>Edgerunner Rig Sim</h1>
-    <p class="sub">CLUE watch → BLE → Bluefruit → wire → Express</p>
+    <p class="sub">CLUE watch → BLE → Bluefruit L + Bluefruit R</p>
   </header>
 
   <section class="bench" aria-label="Simulated hardware">
@@ -83,12 +83,12 @@ h1{font:700 clamp(22px,4vw,30px)/1.1 var(--display);margin:0;letter-spacing:.02e
     </div>
 
     <div class="goggles">
-      <div class="cp"><canvas id="cpL" width="460" height="460" aria-label="Circuit Playground Bluefruit lens"></canvas><span class="lbl">Bluefruit · left lens</span></div>
+      <div class="cp"><canvas id="cpL" width="460" height="460" aria-label="Circuit Playground Bluefruit lens, left"></canvas><span class="lbl">Bluefruit · left lens</span></div>
       <div class="bridge"><svg viewBox="0 0 70 46" preserveAspectRatio="none" aria-hidden="true">
         <path d="M0 23 C 20 6, 50 6, 70 23" stroke="#2a1a33" stroke-width="6" fill="none"/>
-        <path id="wireGlow" d="M0 23 C 20 6, 50 6, 70 23" stroke="#a03cff" stroke-width="2" fill="none" stroke-dasharray="4 6"/>
+        <path id="frameGlow" d="M0 23 C 20 6, 50 6, 70 23" stroke="#a03cff" stroke-width="2" fill="none"/>
       </svg></div>
-      <div class="cp"><canvas id="cpR" width="460" height="460" aria-label="Circuit Playground Express lens"></canvas><span class="lbl">Express · right lens</span></div>
+      <div class="cp"><canvas id="cpR" width="460" height="460" aria-label="Circuit Playground Bluefruit lens, right"></canvas><span class="lbl">Bluefruit · right lens</span></div>
     </div>
   </section>
 
@@ -103,7 +103,7 @@ h1{font:700 clamp(22px,4vw,30px)/1.1 var(--display);margin:0;letter-spacing:.02e
       <span>Byte on the bus: <b id="byteChar">D</b> <b id="byteHex">0x44</b> <span class="bits" id="bits"></span></span>
       <span>CLUE: <b id="clueState">idle</b></span>
     </div>
-    <p class="note">Mode chips act like the CLUE menu. Audio uses a simulated 124 BPM track here; on the boards each lens listens with its own mic. The Octlet's eight legs light the same byte the CLUE sends, and both lenses run the same code as leds.py, so this preview matches what the boards will do.</p>
+    <p class="note">Mode chips act like the CLUE menu. Each lens is its own Circuit Playground Bluefruit (RB-L and RB-R) with no wire between them: the CLUE links to both over BLE and sends each the same byte, so they stay in step, the right side mirroring the left. Audio uses a simulated 124 BPM track here; on the boards each lens listens with its own mic. The Octlet's eight legs light the byte the CLUE sends, and both lenses run the same code as leds.py.</p>
   </section>
 </div>
 
@@ -146,7 +146,9 @@ Lens.prototype.clock=function(dt){
   if(this.burst>0)this.burst-=dt;else if(Math.random()<0.03*dt*50)this.burst=0.08+Math.random()*0.35;};
 Lens.prototype.px=function(i,t,m){
   const N=10,key=this.key;
-  if(m==='D'||m==='I')return sc(COL.purple,breath(t-i/N*0.8));
+  if(m==='D'||m==='I'){   // dark purple, a brighter arc circling; the two lenses turn opposite ways
+    const idx=key%2?N-1-i:i,d=((t*0.25*N-idx)%N+N)%N;
+    return sc(COL.purple,0.12+0.88*Math.pow(Math.max(0,1-d/4),2));}
   if(m==='X'){if(this.cut>0)return COL.off;const r=Math.random();
     if(this.burst>0)return r>0.3?(Math.random()>0.5?COL.mag:COL.cyan):COL.off;
     return r>0.93?sc(COL.mag,0.85):sc(COL.cyan,0.22);}
@@ -308,17 +310,16 @@ updateBus();
 
 /* ---------- loop ---------- */
 const L=new Lens(0),Rl=new Lens(1),cL=document.getElementById('cpL'),cR=document.getElementById('cpR');
-const clueEl=document.getElementById('clue'),wire=document.getElementById('wireGlow');
+const clueEl=document.getElementById('clue'),frameGlow=document.getElementById('frameGlow');
 let last=now(),acc=0,dash=0;
 function frame(){
   const t=reduce?modeT0+1.2:now(),dt=Math.min(0.05,t-last);last=t;
   acc+=dt;while(acc>=0.05){stepClue(t);acc-=0.05;}
-  const a=drawCP(cL,L,'BLUEFRUIT',t,dt),b=drawCP(cR,Rl,'EXPRESS',t,dt);
+  const a=drawCP(cL,L,'BLUEFRUIT L',t,dt),b=drawCP(cR,Rl,'BLUEFRUIT R',t,dt);
   drawClue(t);
   const r=(a[0]+b[0])/2|0,g=(a[1]+b[1])/2|0,bl=(a[2]+b[2])/2|0;
   clueEl.style.setProperty('--glow',`rgb(${r},${g},${bl})`);
-  wire.setAttribute('stroke',`rgb(${Math.max(60,r)},${Math.max(30,g)},${Math.max(60,bl)})`);
-  if(!reduce){dash=(dash-dt*30)%10;wire.setAttribute('stroke-dashoffset',dash);}
+  frameGlow.setAttribute('stroke',`rgb(${Math.max(60,r)},${Math.max(30,g)},${Math.max(60,bl)})`);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
