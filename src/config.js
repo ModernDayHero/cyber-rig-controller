@@ -126,7 +126,8 @@ export const cmd = {
 
 // Slash commands typed in the INCOMING box. Eggs: look key the hat / BOLT show
 // meanwhile (null = no picture), for as long as the CLUE runs them.
-export const EGGS = { boo: { look: 'G', ms: 12000 }, pumpkin: { look: 'J', ms: 12000 }, secret: { look: null, ms: 3000 } };
+// 20 s, same as the CLUE's EGG_TIME: the hat needs a few seconds to upload before it shows.
+export const EGGS = { boo: { look: 'G', ms: 20000 }, pumpkin: { look: 'J', ms: 20000 }, secret: { look: null, ms: 3000 } };
 
 export const modeOf = (s) => SETS[s.set].modes[s.idx[s.set]];
 

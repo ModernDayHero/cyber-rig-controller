@@ -957,7 +957,7 @@ def alert(k, text):
 # ---------- easter eggs (phone X): /boo, /pumpkin, /secret ----------
 # A full-screen overlay on top of everything; the mask runs G / J meanwhile,
 # then everything goes back to the mode it was in.
-EGG_TIME = 12.0
+EGG_TIME = 20.0           # long enough to outlast the hat's 3-7 s upload
 GHOST_C, ORANGE, STEM, CANDLE = 0xA0A8C8, 0xFF5A00, 0x2E8B2E, 0xFFC020
 egg = displayio.Group()
 egg.append(vectorio.Rectangle(pixel_shader=_pal(0), width=240, height=240, x=0, y=0))

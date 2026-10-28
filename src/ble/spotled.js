@@ -463,12 +463,12 @@ function lookFramesRaw(look, s, w, h) {
     case 'G': { // /boo: a ghost drifting side to side, BOO flashing up beside it
       const sprite = ['...####...', '.########.', '##########', '##..##..##', '##..##..##', '##########',
         '####..####', '####..####', '##########', '##########', '##########', '#.#.##.#.#'];
-      const n = 16;
-      return { ms: 150, frames: Array.from({ length: n }, (_, f) => {
+      const n = 8;                 // 8 frames: uploads in ~3 s
+      return { ms: 260, frames: Array.from({ length: n }, (_, f) => {
         const cv = canvas(w, h);
-        const gx = Math.round((w - 10) / 2 + 9 * Math.sin(2 * Math.PI * f / n)), gy = 2 + (f % 4 < 2 ? 0 : 1);
+        const gx = Math.round((w - 10) / 2 + 9 * Math.sin(2 * Math.PI * f / n)), gy = 2 + (f % 2);
         sprite.forEach((row, y) => [...row].forEach((p, x) => { if (p === '#') cv.set(gx + x, gy + y, GHOST); }));
-        if (f % 8 >= 5) drawText(cv, 'BOO', gx < (w - 10) / 2 ? w - 12 : 1, 1, GHOST);
+        if (f % 4 >= 2) drawText(cv, 'BOO', gx < (w - 10) / 2 ? w - 12 : 1, 1, GHOST);
         return cv.frame();
       }) };
     }
