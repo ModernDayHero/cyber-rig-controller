@@ -61,6 +61,9 @@ h1{font:700 clamp(22px,4vw,30px)/1.1 var(--display);margin:0;letter-spacing:.02e
 .bits span{width:10px;height:10px;border-radius:2px;background:#26222f}
 .bits span.on{background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
 .note{color:var(--dim);font-size:12px;margin:0;max-width:70ch}
+.pair{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;font-size:12.5px}
+.pair label{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.pair input[type=color]{width:44px;height:30px;border:1px solid var(--edge);border-radius:6px;background:none;padding:2px;cursor:pointer}
 @media (max-width:520px){.clue{grid-template-columns:34px 1fr 34px}.hwbtn{width:26px;height:26px}}
 @media (prefers-reduced-motion:reduce){.hwbtn:active{transform:none}}
 </style>
@@ -95,6 +98,11 @@ h1{font:700 clamp(22px,4vw,30px)/1.1 var(--display);margin:0;letter-spacing:.02e
   <section class="deck" aria-label="Controls">
     <span class="lbl">Modes</span>
     <div class="chips" id="chips"></div>
+    <div class="pair" id="pair" hidden>
+      <label><input type="color" id="c1" value="#a03cff"> Color 1</label>
+      <label><input type="color" id="c2" value="#00e5ff"> Color 2</label>
+      <span class="note">The lenses breathe between these, like the CLUE's color pickers.</span>
+    </div>
     <div class="acts">
       <button class="act virus" id="btnVirus">Release virus</button>
       <button class="act purge" id="btnPurge" disabled>Purge</button>
@@ -115,7 +123,13 @@ const PADS=[[[17, 57], [20, 47], [13, 40], [21, 34], [20, 24], [30, 23], [35, 14
 const MODES=[
   {b:'D',name:'Dark',c:'#a03cff'},{b:'X',name:'Glitch',c:'#ff2bd6'},{b:'H',name:'Hunt',c:'#ff1e1e'},
   {b:'h',name:'Heartbeat',c:'#ff5a5a'},{b:'M',name:'Matrix',c:'#22ff66'},{b:'R',name:'Rainbow',c:'linear-gradient(90deg,#f33,#ff3,#3f3,#3ff,#33f,#f3f)'},
-  {b:'P',name:'Peace out',c:'#ffffff'},{b:'A',name:'Audio',c:'linear-gradient(0deg,#00ff28,#ffc800,#ff0000)'}];
+  {b:'P',name:'Peace out',c:'#ffffff'},{b:'A',name:'Audio',c:'linear-gradient(0deg,#00ff28,#ffc800,#ff0000)'},
+  {b:'B',name:'Rebreather',c:'linear-gradient(90deg,#a03cff,#00e5ff)'}];
+// Rebreather: the two colours it breathes between (the CLUE's defaults, purple -> cyan)
+const hexRgb=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const PAIR=[hexRgb('#a03cff'),hexRgb('#00e5ff')];
+const breatheW=(t,lag)=>0.5-0.5*Math.cos((t-lag)*2*Math.PI/5.5);   // same 5.5 s as leds.py
+const mixRgb=(a,b,w)=>[a[0]+(b[0]-a[0])*w,a[1]+(b[1]-a[1])*w,a[2]+(b[2]-a[2])*w];
 const COL={purple:[160,60,255],mag:[255,43,214],cyan:[0,229,255],red:[255,30,30],green:[34,255,102],gh:[200,255,216],white:[255,255,255],off:[0,0,0]};
 const sc=(c,k)=>{k=Math.max(0,Math.min(1,k));return [c[0]*k,c[1]*k,c[2]*k];};
 const breath=t=>0.1+0.9*Math.pow(0.5-0.5*Math.cos(t*2*Math.PI/5.5),1.6);
@@ -159,6 +173,7 @@ Lens.prototype.px=function(i,t,m){
   if(m==='M'){let d=(t*N*0.55+key*3.1)%N-i;if(d<0)d+=N;if(d<1)return COL.gh;
     return sc(COL.green,d<N*0.5?Math.pow(1-d/(N*0.5),1.6):0.03);}
   if(m==='R')return wheel(((i/N)*0.5+key*0.5)*0.3-t*0.06);
+  if(m==='B'){const w=breatheW(t,i/N*0.8);return sc(mixRgb(PAIR[0],PAIR[1],w),0.35+0.65*w);}   // ripples round the ring
   if(m==='P'){const f=t-modeT0;const k=f<0.4?f/0.4:f<1.6?1:Math.max(0,1-Math.pow((f-1.6)/4,0.8));return sc(COL.white,k);}
   return COL.off;};
 
@@ -268,6 +283,14 @@ function stepClue(t){
     m.x+=m.vx;m.y+=m.vy;});
 }
 function drawClue(t){
+  if(mode==='B'&&clue==='idle'){   // REBREATHER screen: the colour block breathing, no Octlet
+    const c=mixRgb(PAIR[0],PAIR[1],breatheW(t,0)).map(v=>v|0),hx=v=>v.map(n=>n.toString(16).padStart(2,'0')).join('').toUpperCase();
+    sg.fillStyle=`rgb(${c})`;sg.fillRect(0,0,240,240);
+    sg.fillStyle='rgba(0,0,0,.55)';sg.fillRect(0,178,240,62);
+    sg.fillStyle='#fff';sg.textBaseline='top';sg.font='700 16px "JetBrains Mono",monospace';sg.fillText('REBREATHER',12,186);
+    sg.font='600 11px "JetBrains Mono",monospace';sg.fillText(`1:#${hx(PAIR[0])} > 2:#${hx(PAIR[1])}`,12,210);
+    return;
+  }
   sg.fillStyle='#000';sg.fillRect(0,0,240,240);
   sg.font='600 11px "JetBrains Mono",monospace';sg.textBaseline='top';
   lines.forEach((l,i)=>{sg.fillStyle=l.c;sg.fillText(l.t,4,4+i*19);});
@@ -292,7 +315,9 @@ MODES.forEach(m=>{const b=document.createElement('button');b.className='chip';b.
   b.dataset.b=m.b;b.setAttribute('aria-pressed',String(m.b===mode));b.innerHTML=`<i style="--c:${m.c};background:${m.c}"></i>${m.name}`;
   b.addEventListener('click',()=>setMode(m.b));chips.appendChild(b);});
 function setMode(b){if(clue!=='idle')purge();mode=b;modeT0=now();
-  chips.querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed',String(c.dataset.b===b)));updateBus();}
+  chips.querySelectorAll('.chip').forEach(c=>c.setAttribute('aria-pressed',String(c.dataset.b===b)));
+  document.getElementById('pair').hidden=b!=='B';updateBus();}
+['c1','c2'].forEach((id,k)=>document.getElementById(id).addEventListener('input',e=>{PAIR[k]=hexRgb(e.target.value);}));
 const vBtn=document.getElementById('btnVirus'),pBtn=document.getElementById('btnPurge');
 function release(){if(clue!=='idle')return;clue='infect';phaseT=now();splashUntil=0;iconBig=false;
   push('!! UNKNOWN PROCESS: octlet.exe','#dc0014');spawn(0);vBtn.disabled=true;pBtn.disabled=false;updateBus();}
