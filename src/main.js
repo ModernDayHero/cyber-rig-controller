@@ -408,7 +408,8 @@ function chip(key, label, onTap) {
 }
 
 chip('clue', 'CLUE', () => pick(rig.clue));
-chip('mask', 'Mask');
+chip('maskL', 'Mask L');
+chip('maskR', 'Mask R');
 chip('cap', 'Hat', () => pick(rig.cap));
 chip('bolt', 'BOLT', () => pick(rig.bolt));
 
@@ -421,7 +422,10 @@ for (const d of rig.devices) {
 }
 
 function updateMask() {
-  statusEls.mask.dataset.s = !rig.clue.connected ? 'idle' : rig.clue.mask ? 'connected' : 'lost';
+  for (const side of ['L', 'R']) {
+    statusEls['mask' + side].dataset.s =
+      !rig.clue.connected ? 'idle' : rig.clue.mask[side] ? 'connected' : 'lost';
+  }
 }
 rig.clue.addEventListener('mask', updateMask);
 rig.clue.addEventListener('refused', (e) => {

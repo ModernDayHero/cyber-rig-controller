@@ -9,7 +9,7 @@
 //   T min max          random-hack timer, seconds (0 0 = off)
 //   P on|waking|blink|off
 //   V 0|1              hacked (the CLUE refuses M/C while 1; K purges)
-//   L 0|1              mask Bluefruit link
+//   L 0|1 0|1          mask Bluefruit links, left then right (older firmware: left only)
 //   E <why>            a command was refused (locked, asleep, bad)
 
 import { RigDevice } from './device.js';
@@ -36,7 +36,7 @@ export class Clue extends RigDevice {
     this.tx = null;
     this._queue = Promise.resolve();
     this._buf = '';
-    this.mask = false;
+    this.mask = { L: false, R: false };
   }
 
   async setup(server) {
@@ -49,7 +49,7 @@ export class Clue extends RigDevice {
 
   teardown() {
     this.rx = this.tx = null;
-    this._setMask(false);
+    this._setMask(false, false);
   }
 
   /** Queue one line. GATT allows one operation at a time, so writes are serialised. */
@@ -113,7 +113,7 @@ export class Clue extends RigDevice {
         report({ hacked: w[0] === '1' });
         break;
       case 'L':
-        this._setMask(w[0] === '1');
+        this._setMask(w[0] === '1', w[1] === '1');
         break;
       case 'E':
         this.dispatchEvent(new CustomEvent('refused', { detail: w.join(' ') }));
@@ -121,8 +121,8 @@ export class Clue extends RigDevice {
     }
   }
 
-  _setMask(up) {
-    this.mask = up;
-    this.dispatchEvent(new CustomEvent('mask', { detail: up }));
+  _setMask(left, right) {
+    this.mask = { L: left, R: right };
+    this.dispatchEvent(new CustomEvent('mask', { detail: this.mask }));
   }
 }

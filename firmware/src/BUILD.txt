@@ -1,0 +1,11 @@
+Sources for the compiled files. Do NOT copy these .py files onto the boards:
+a .py next to its .mpy wins, and the CLUE/Express run out of RAM compiling it.
+
+rig.py   -> CLUE/rig.mpy                 mpy-cross rig.py
+leds.py  -> BLUEFRUIT/leds.mpy and EXPRESS/leds.mpy   mpy-cross leds.py
+
+mpy-cross must match the CircuitPython major version (9.x):
+https://adafruit-circuit-python.s3.amazonaws.com/bin/mpy-cross/windows/mpy-cross-windows-9.2.9.static.exe
+
+to4bit.py: repacks an 8-bit indexed BMP as 4-bit (halves the sprite's RAM).
+  python to4bit.py in.bmp out.bmp

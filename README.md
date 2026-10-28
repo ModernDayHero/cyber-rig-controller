@@ -4,7 +4,7 @@ Phone controller for the STEAMWorkz cyber rig. A Web Bluetooth PWA for Chrome on
 Android, hosted on GitHub Pages.
 
 ```
-Phone ──BLE──▶ CLUE (watch) ──BLE──▶ Rebreather mask (Circuit Playground Bluefruit)
+Phone ──BLE──▶ CLUE (watch) ──BLE──▶ Rebreather mask, left + right (Circuit Playground Bluefruit ×2)
       ──BLE──▶ SpotLED hat (32x16)
       ──BLE──▶ Sphero BOLT (8x8)
 ```
@@ -60,7 +60,7 @@ add `public/CNAME`.
 | `H` / `K` / `?` | start the hack / purge it / report everything |
 
 CLUE → phone, on every change: `M <set> <i>`, `C …`, `R …`, `P on|waking|blink|off`,
-`V 0|1` (hacked: M and C are refused, K still purges), `L 0|1` (mask link), `E <why>`.
+`V 0|1` (hacked: M and C are refused, K still purges), `L <left> <right>` (mask links, 0|1 each), `E <why>`.
 
 ### SpotLED hat (`SpotLED_2986`)
 
@@ -88,3 +88,4 @@ animation uploaded once and looped by the BOLT. Collision events = shake.
 | `src/ble/bolt.js` | BOLT packets, animations, text, shake |
 | `src/ble/spotled.js` | Hat transfer, RGB323, the rig looks (Octlet logo, rain, virus…) |
 | `src/main.js` | UI wiring, wake lock |
+| `firmware/` | CircuitPython 9.x for the CLUE and both mask Bluefruits; see `firmware/README.txt` and `firmware/src/BUILD.txt` |
