@@ -95,7 +95,7 @@ SETS = {
         (b"X", "GLITCH",     MAGENTA,  "term"),
         (b"r", "RAINFALL",   0xB040FF, "term"),   # purple/magenta/cyan rain + lightning
         (b"M", "MATRIX",     GREEN,    "term"),
-        (b"h", "HEARTBEAT",  RED,      "term"),     # red lub-dub pulse
+        (b"h", "HEARTBEAT",  RED,      "heart"),    # red lub-dub pulse, a beating heart on screen
     ],
     "alt": [
         (b"A", "AUDIO VU",   0xFFC800, "vu"),
@@ -465,6 +465,37 @@ rb_grp = displayio.Group(scale=15)
 rb_grp.append(displayio.TileGrid(rb_bmp, pixel_shader=rb_pal))
 rb_grp.hidden = True
 root.append(rb_grp)
+
+# HEARTBEAT screen: a heart beating lub-dub (the mask's rhythm) and a BPM readout
+heart_pal = displayio.Palette(1)
+heart_pal[0] = RED
+heart_grp = displayio.Group()
+heart_l = vectorio.Circle(pixel_shader=heart_pal, radius=28, x=95, y=95)
+heart_r = vectorio.Circle(pixel_shader=heart_pal, radius=28, x=145, y=95)
+heart_v = vectorio.Polygon(pixel_shader=heart_pal, points=[(0, 0), (1, 0), (0, 1)], x=120, y=105)
+for s in (heart_l, heart_r, heart_v):
+    heart_grp.append(s)
+bpm_txt = make_text(6, 84, 196, RED, scale=2)
+heart_grp.append(bpm_txt[0])
+heart_grp.hidden = True
+root.append(heart_grp)
+bpm = 72
+
+def heart_beat(t):
+    """Lub (full) and dub (0.7) about 57 times a minute: same as the mask's h."""
+    p = t % 1.05
+    return math.exp(-(p / 0.055) ** 2) + 0.7 * math.exp(-((p - 0.24) / 0.06) ** 2)
+
+def heart_draw(now):
+    global bpm
+    k = 0.85 + 0.3 * heart_beat(now)
+    heart_l.radius = heart_r.radius = int(28 * k)
+    heart_l.x, heart_r.x = 120 - int(25 * k), 120 + int(25 * k)
+    heart_l.y = heart_r.y = 105 - int(10 * k)
+    heart_v.points = [(-int(52 * k), -int(2 * k)), (int(52 * k), -int(2 * k)), (0, int(62 * k))]
+    if now % 1.05 < 0.05:                    # a new beat: the reading drifts a little
+        bpm = max(64, min(84, bpm + random.choice((-1, 0, 1))))
+        set_text(bpm_txt[1], "{} BPM".format(bpm))
 
 # WATCH screen: the Octlet as a clock. Body + eye in the middle, legs as the hands.
 W_CX, W_CY = 120, 112
@@ -1208,8 +1239,12 @@ def apply_theme():
 def show_screen():
     scr = cur()[3]
     term.hidden = scr != "term"
-    icon.hidden = scr in ("breathe", "watch")
+    icon.hidden = scr in ("breathe", "watch", "heart")
     watch_grp.hidden = scr != "watch"
+    heart_grp.hidden = scr != "heart"
+    if scr == "heart":
+        heart_pal[0] = bpm_txt[2][1] = text_color()     # tuned pulse colour, else red
+        set_text(bpm_txt[1], "{} BPM".format(bpm))
     if scr == "watch":
         watch_update(force=True)
     vu_grp.hidden = scr != "vu"
@@ -1273,8 +1308,10 @@ def schedule_hack():
         next_hack = time.monotonic() + random.uniform(hack_range[0], hack_range[1])
 
 def hijack():
-    """The virus interjects on its own: from any mode, onto the OS screen."""
-    if cur_set != "os":
+    """The virus interjects on its own: from any mode, onto the OS terminal."""
+    if cur_set != "os" or cur()[3] != "term":
+        if SETS["os"][idx["os"]][3] != "term":
+            idx["os"] = 0                  # e.g. HEARTBEAT: the virus needs the terminal
         change(new_set="os")
     term_push("!! INTRUSION DETECTED", RED)
     go_virus()
@@ -1319,7 +1356,7 @@ def go_standby():
     power, power_t = "blink", time.monotonic()
     send(b"W")                  # rig blinks white, then off
     term.hidden = icon.hidden = False
-    vu_grp.hidden = br_grp.hidden = rb_grp.hidden = True
+    vu_grp.hidden = br_grp.hidden = rb_grp.hidden = heart_grp.hidden = True
     icon.scale, icon.x, icon.y = 1, 240 - 68, 4
     term_color(WHITE)
     tint(WHITE)
@@ -1336,7 +1373,7 @@ def go_waking():
     power, power_t = "waking", time.monotonic()
     cur_set, idx["os"], locked = "os", 0, None
     term.hidden = icon.hidden = False
-    vu_grp.hidden = br_grp.hidden = rb_grp.hidden = True
+    vu_grp.hidden = br_grp.hidden = rb_grp.hidden = heart_grp.hidden = True
     icon.scale, icon.x, icon.y = 1, 240 - 68, 4
     term_color(WHITE)
     tint(WHITE)
@@ -1566,6 +1603,8 @@ while True:
             w = 0.5 - 0.5 * math.cos(now * 2 * math.pi / 5.5)   # same 5.5 s as the rig
             a, b = pair
             br_pal[0] = rgb_int([a[k] + (b[k] - a[k]) * w for k in range(3)])
+        elif scr == "heart":
+            heart_draw(now)
         else:
             if cur()[2] is None and not locked and t % 2 == 0:
                 apply_theme()              # rainbow: keep the hue rolling
