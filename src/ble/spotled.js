@@ -821,6 +821,53 @@ export class SpotLed extends RigDevice {
     await this.showFrames(frames, { ms }, JSON.stringify(['msg', text, color]));
   }
 
+  /** A clock. 'static': big HH:MM, colon blinking, day + date under it.
+   *  'ticker': "12:34  TUE 29 OCT" stepping past one big character a frame.
+   *  The time is drawn from `d`, so a new upload is only needed when the minute changes. */
+  async showClock(style, d = new Date(), color = [0, 229, 255], dim = [255, 43, 214]) {
+    const { width: w, height: h } = this.info;
+    const h12 = ['h11', 'h12'].includes(new Intl.DateTimeFormat([], { hour: 'numeric' }).resolvedOptions().hourCycle);
+    const hr = h12 ? (d.getHours() % 12 || 12) : d.getHours();
+    const time = `${h12 ? hr : String(hr).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    const day = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][d.getDay()];
+    const mon = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][d.getMonth()];
+    const big = (cv, ch, x, y, c) => (FONT[ch] || []).forEach((row, gy) => [...row].forEach((p, gx) => {
+      if (p === '#') for (let k = 0; k < 4; k++) cv.set(x + gx * 2 + (k & 1), y + gy * 2 + (k >> 1), c);
+    }));
+    let frames, ms;
+    if (style === 'ticker') {
+      const text = `${time}  ${day} ${d.getDate()} ${mon}  `;         // loops round: no gap needed
+      frames = [...text].map((_, k) => {
+        const cv = canvas(w, h);
+        for (let i = 0; i < 5; i++) {
+          const ch = text[(k + i) % text.length];
+          big(cv, ch, i * 8, 3, /[0-9:]/.test(ch) ? color : dim);
+        }
+        return cv.frame();
+      });
+      ms = 260;
+    } else {
+      // digits 6 px wide (the 3x5 font doubled), a 2 px colon, 1 px gaps
+      const parts = [...time].map((ch) => [ch, ch === ':' ? 2 : 6]);
+      const tw = parts.reduce((a, [, cw]) => a + cw, 0) + parts.length - 1;
+      frames = [true, false].map((colon) => {
+        const cv = canvas(w, h);
+        let x = Math.round((w - tw) / 2);
+        for (const [ch, cw] of parts) {
+          if (ch === ':') {
+            if (colon) for (const y of [2, 6]) for (let k = 0; k < 4; k++) cv.set(x + (k & 1), y + (k >> 1), color);
+          } else big(cv, ch, x, 0, color);
+          x += cw + 1;
+        }
+        const date = `${day} ${d.getDate()}`;
+        drawText(cv, date, Math.round((w - (date.length * 4 - 1)) / 2), 11, dim);
+        return cv.frame();
+      });
+      ms = 1000;
+    }
+    await this.showFrames(frames, { ms }, JSON.stringify(['clock', style, time, day, d.getDate()]));
+  }
+
   /** Follow the rig: the look's animation at the hat's brightness. */
   async applyState(s) {
     if (!s.look.on) return this.clear();

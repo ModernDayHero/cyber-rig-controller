@@ -237,11 +237,23 @@
       <div class="view" id="view-hat" hidden>
         <div class="row">
           <span class="label">SHOW</span>
-          <div class="seg" id="hatFollow">
-            <button data-follow="1">FOLLOW RIG</button>
-            <button data-follow="0">OWN IMAGE</button>
+          <div class="seg seg3" id="hatFollow">
+            <button data-show="rig">FOLLOW RIG</button>
+            <button data-show="own">OWN IMAGE</button>
+            <button data-show="clock">CLOCK</button>
           </div>
         </div>
+
+        <section class="panel" id="hatClock" hidden aria-label="Hat clock">
+          <div class="row">
+            <span class="label">STYLE</span>
+            <div class="seg" id="hatClockStyle">
+              <button data-style="static">STATIC</button>
+              <button data-style="ticker">TICKER</button>
+            </div>
+          </div>
+          <span class="hint">Updates when the minute changes. Calls, messages, /commands and the virus still cut in.</span>
+        </section>
 
         <section class="panel" id="hatOwn">
           <canvas class="pix hat-pix" id="hatPreview" width="32" height="16"></canvas>

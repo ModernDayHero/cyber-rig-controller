@@ -291,7 +291,8 @@ function renderBolt(b) {
 
 // ---------- HAT tab ----------
 EFFECTS.forEach((name, i) => $('hatEffect').append(new Option(name.toUpperCase(), i)));
-segPick('hatFollow', 'follow', (v) => rig.setHat({ follow: v === '1' }, { now: true }));
+segPick('hatFollow', 'show', (v) => rig.setHat({ follow: v === 'rig', clock: v === 'clock' }, { now: true }));
+segPick('hatClockStyle', 'style', (v) => rig.setHat({ clockStyle: v }, { now: true }));
 segPick('hatScreen', 'screen', (v) => rig.setHat({ screen: Number(v) }));
 segPick('hatLightning', 'lightning', (v) => rig.setHat({ lightning: Number(v) }));
 $('hatBright').addEventListener('input', () => rig.setHat({ brightness: Number($('hatBright').value) }));
@@ -346,10 +347,12 @@ rig.cap.addEventListener('progress', (e) => {
 rig.cap.addEventListener('info', () => convertHat());
 
 function renderHat(h) {
-  segShow('hatFollow', 'follow', h.follow ? 1 : 0);
+  segShow('hatFollow', 'show', h.clock ? 'clock' : h.follow ? 'rig' : 'own');
+  segShow('hatClockStyle', 'style', h.clockStyle);
+  $('hatClock').hidden = !h.clock;
   segShow('hatScreen', 'screen', h.screen);
   segShow('hatLightning', 'lightning', h.lightning);
-  $('hatOwn').classList.toggle('dim', h.follow);
+  $('hatOwn').classList.toggle('dim', h.follow || h.clock);
   $('hatEffect').value = h.effect;
   $('hatMs').value = h.ms;
   $('hatMsOut').textContent = `${h.ms}ms`;

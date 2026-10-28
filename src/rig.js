@@ -25,7 +25,10 @@ const DEFAULT_HAT = {
   effect: 0,                          // transition between frames (spotled EFFECTS)
   ms: 200,                            // frame time for uploaded animations
   lightning: 3,                       // Rainfall strikes per loop: 0 off .. 3 storm
+  clock: false,                       // show a clock instead (wins over follow / image)
+  clockStyle: 'static',               // 'static' big HH:MM + date, or 'ticker'
 };
+const CLOCK_CHECK_MS = 15000;         // the hat only gets a new upload when the minute changes
 
 function load() {
   try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch { return {}; }
@@ -102,6 +105,9 @@ export class Rig extends EventTarget {
     this._timers = {};
     // Keep the CLUE's watch accurate: re-sync every 10 minutes while connected.
     setInterval(() => { if (this.clue.connected) this.clue.send(cmd.time()); }, 10 * 60 * 1000);
+    // Hat clock: check often, but showClock's signature only changes with the minute,
+    // so the hat is only reconnected and re-sent once a minute.
+    setInterval(() => { if (this.state.hat.clock) this.pushCap(); }, CLOCK_CHECK_MS);
   }
 
   _save() {
@@ -154,7 +160,9 @@ export class Rig extends EventTarget {
     // A message is scrolling: it puts the look back after (an egg or the virus cut in).
     if (this.hatMsg && !this.state.egg && !this.state.hacked) return;
     const h = this.state.hat, lk = look(this.state);
-    if (h.follow || !lk.on || !this.hatImage || this.state.egg || this.state.hacked) {
+    if (h.clock && lk.on && !this.state.egg && !this.state.hacked) {
+      this.cap.showClock(h.clockStyle);
+    } else if (h.follow || !lk.on || !this.hatImage || this.state.egg || this.state.hacked) {
       this.cap.applyState({ ...this.state, look: lk });
     } else {
       this.cap.showFrames(this.hatImage, { ms: h.ms, effect: h.effect, speed: 0 },
@@ -191,7 +199,8 @@ export class Rig extends EventTarget {
       if (!this.cap.available) return;
       if (patch.brightness !== undefined) await this.cap.setBrightness(this.state.hat.brightness);
       if (patch.screen !== undefined) await this.cap.setScreenMode(this.state.hat.screen);
-      if (patch.follow !== undefined || patch.ms !== undefined || patch.effect !== undefined) this.pushCap();
+      if (patch.follow !== undefined || patch.ms !== undefined || patch.effect !== undefined
+        || patch.clock !== undefined || patch.clockStyle !== undefined) this.pushCap();
       else if (patch.lightning !== undefined && this.state.hat.follow) this.pushCap();
     };
     if (now) go(); else this._debounce('hat', 250, go);
@@ -200,7 +209,7 @@ export class Rig extends EventTarget {
   setHatImage(frames) {
     this.hatImage = frames;
     this.hatImageId = (this.hatImageId || 0) + 1;
-    this.setHat({ follow: false }, { now: true });
+    this.setHat({ follow: false, clock: false }, { now: true });
   }
 
   get locked() {
