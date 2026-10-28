@@ -160,20 +160,23 @@ for (const b of $('showCmd').querySelectorAll('button')) b.addEventListener('cli
 const SLASH = {
   hack: () => rig.hack(),
   purge: () => rig.purge(),
-  ...Object.fromEntries(Object.keys(EGGS).map((name) => [name, () => rig.egg(name)])),
+  ...Object.fromEntries(Object.keys(EGGS).filter((n) => !EGGS[n].notCmd).map((name) => [name, () => rig.egg(name)])),
 };
-// Enter: /command runs it, anything else goes out as a message.
+const LISTED = Object.keys(SLASH).filter((n) => !EGGS[n]?.hidden).map((n) => '/' + n).join(' ');
+// Enter: /command runs it, anything else goes out as a message. A /word that isn't
+// a command still gets a show: the word, then a big ? on the rig.
 $('alertText').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
   const v = $('alertText').value.trim();
   if (!v.startsWith('/')) { sendAlert('m'); return; }
-  const run = SLASH[v.slice(1).toLowerCase()];
-  if (run) {
-    run();
-    $('alertText').value = '';
-  } else {
-    showBanner(`Unknown command ${v}. Try ${Object.keys(SLASH).map((k) => '/' + k).join(' ')}`);
+  const word = v.slice(1).split(/\s+/)[0] || '?';
+  const run = SLASH[word.toLowerCase()];
+  if (run) run();
+  else {
+    rig.egg('huh', word);
+    showBanner(`Unknown command /${word}. Try ${LISTED}`);
   }
+  $('alertText').value = '';
 });
 
 // ---------- views: RIG / BOLT / HAT ----------

@@ -536,6 +536,16 @@ function lookFramesRaw(look, s, w, h) {
         return cv.frame();
       }) };
     }
+    case '?': { // an unknown /command: a big blinking question mark
+      const Y = [255, 200, 0], g = FONT['?'], ox = Math.round((w - 6) / 2), oy = Math.round((h - 10) / 2);
+      return { ms: 250, frames: [1, 1, 0, 1].map((on) => {
+        const cv = canvas(w, h);
+        if (on) g.forEach((row, y) => [...row].forEach((p, x) => {
+          if (p === '#') for (let d = 0; d < 4; d++) cv.set(ox + x * 2 + (d & 1), oy + y * 2 + (d >> 1), Y);
+        }));
+        return cv.frame();
+      }) };
+    }
     case 'c': { // /boobs, /dick ...: a hot-pink CENSORED bar, jittering
       return { ms: 150, frames: [0, 0, 1, 0, -1, 0].map((dx, f) => {
         const cv = canvas(w, h);

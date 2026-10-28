@@ -909,6 +909,8 @@ SOUNDS = {
     "v": ((0.0, 0.12, (A5, 784, A5, 0, 784, F5, E5, D5, 554, D5)),),
     # /frank: an electric zap, buzzing between a high and a low tone
     "k": ((0.0, 0.02, tuple((1800 if i % 2 else 300) + 37 * (i % 7) for i in range(40))),),
+    # unknown command: an error boop-boop, falling
+    "e": ((0.0, 0.12, (523, 0, 392)),),
     # censored: the TV bleep
     "b": ((0.0, 0.8, (1000,)),),
     # /middle: a buzzing raspberry, sagging down
@@ -985,7 +987,9 @@ EGGS = {
     "fish":    (b"f", "f", "BLUB BLUB",         0x60C0FF, 0x001830),
     "middle":  (b"u", "u", "THIS ONE'S FOR YOU", 0xFF008C, 0),
     "censor":  (b"c", "b", "NICE TRY, CHOOM",   0xFF2BD6, 0),   # /boobs /dick ... (the phone maps them)
+    "huh":     (b"X", "e", "UNKNOWN COMMAND",   0xFFC800, 0),   # any /word that isn't one
 }
+EGG_SHORT = {"huh": 5.0}  # eggs that don't run the full EGG_TIME
 egg_bg = _pal(0)
 egg = displayio.Group()
 egg.append(vectorio.Rectangle(pixel_shader=egg_bg, width=240, height=240, x=0, y=0))
@@ -1098,6 +1102,11 @@ def build_egg(k):
         for gx, gy in ((-36, -2), (30, -2), (0, -60), (0, -20)):
             g.append(_c(glow, 4, gx, gy))            # magenta joint lights
         return g, [glow]
+    if k == "huh":                                   # a giant blinking ?
+        q = make_text(1, -24, -60, 0xFFC800, scale=8)  # one 6 x 14 glyph, x8
+        set_text(q[1], "?")
+        g.append(q[0])
+        return g, [q[2]]
     if k == "censor":                                # a glitching CENSORED bar
         g.y = 120
         g.append(_r(0xFF2BD6, 220, 76, -110, -38))
@@ -1119,6 +1128,7 @@ def start_egg(k, title=""):
         term_glitch(3)
         return
     byte, snd, caption, color, bg = EGGS[k]
+    egg_end = time.monotonic() + EGG_SHORT.get(k, EGG_TIME)
     egg[1] = displayio.Group()           # drop the last picture before building this one
     gc.collect()
     egg[1], egg_fx = build_egg(k)
@@ -1156,6 +1166,8 @@ def egg_step(now):
     elif egg_k == "frank":               # sparks jump the neck bolts
         for z in egg_fx:
             z.hidden = random.random() > 0.25
+    elif egg_k == "huh":                 # the ? blinks
+        egg_fx[0][1] = 0xFFC800 if (now * 2) % 1 < 0.7 else 0x302400
     elif egg_k == "censor":              # the bar glitches sideways now and then
         art.x = 120 + (random.choice((-6, 4, 8)) if random.random() < 0.15 else 0)
     elif egg_k == "middle":              # joint lights pulse, the hand jabs up on the beat

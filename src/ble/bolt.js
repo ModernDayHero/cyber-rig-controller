@@ -234,6 +234,12 @@ export function lookAnimation(look, s) {
       return { palette: [[0, 20, 60], [255, 140, 26], [0, 0, 0], [150, 200, 255]], frames: [at(a), at(b)], fps: 3, fade: false };
     }
 
+    case '?': { // an unknown /command: a blinking question mark
+      const p = ['..####..', '.##..##.', '.....##.', '....##..', '...##...', '...##...', '........', '...##...'];
+      const at = (on) => grid((x, y) => (on && p[y][x] === '#' ? 1 : 0));
+      return { palette: [[0, 0, 0], [255, 200, 0]], frames: [at(true), at(true), at(false)], fps: 3, fade: false };
+    }
+
     case 'c': // /boobs, /dick ...: a censor bar across the middle, blinking
       return { palette: [[0, 0, 0], MAG, dim(MAG, 0.2)],
         frames: [1, 2].map((c) => grid((x, y) => (y >= 2 && y <= 5 ? c : 0))), fps: 6, fade: false };

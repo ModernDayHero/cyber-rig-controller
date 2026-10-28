@@ -299,9 +299,10 @@ export class Rig extends EventTarget {
   /** /boo, /pumpkin, /secret: the CLUE runs the mask + its screen. The hat and BOLT
    *  show the command first, then the egg's look, for the same time (taking over
    *  OWN content too), then go back to what they were showing. */
-  egg(name) {
+  egg(name, typed = name) {
     const e = EGGS[name];
-    const title = '/' + name.toUpperCase();
+    // The title is what was typed (e.g. /PIZZA before the ?): one word, ASCII.
+    const title = '/' + typed.toUpperCase().replace(/[^!-~]/g, '').slice(0, 19);
     this.clue.send(cmd.egg(e.as || name, e.look && this.state.showCmd ? title : ''));
     if (!e.look) return;
     this.state.egg = e.look;                 // not saved: it only lasts e.ms
@@ -322,7 +323,8 @@ export class Rig extends EventTarget {
         .then(() => setTimeout(() => still() && this.pushBolt(), 2500));
     }
     if (this.cap.available) {                // the title holds while the look uploads
-      this.cap.showTitle(title, e.rgb).then(() => setTimeout(() => still() && this.pushCap(), 1000));
+      this.cap.showTitle(title.slice(0, 8), e.rgb)    // 8 characters fill the 32 px
+        .then(() => setTimeout(() => still() && this.pushCap(), 1000));
     }
   }
 
