@@ -11,6 +11,7 @@
 #
 # Controls
 #   A / B   next / previous mode in the current set (presses are queued, never missed)
+#   A + B   pressed together: switch set, STEAMWorkz OS <-> ALT (same as pad 1)
 #   Pad 0   hold 5 s: STANDBY (rig blinks white, slowing down over ~2 min as it
 #           counts down, then everything off); keep holding to 10 s: off now;
 #           hold 5 s again: ACTIVE. Power-up and wake blink white, then land
@@ -882,6 +883,9 @@ p0_since = None
 p0_done = False
 last_count = -1
 p1_prev = p2_prev = False
+held = [False, False]     # buttons A, B down right now
+pending = None            # (button, time): a press waiting to see if the other joins it
+CHORD = 0.2               # seconds both buttons count as pressed together
 
 # ---------- alerts: incoming call / message (phone N) ----------
 # The mask's leds.py SOUNDS, all of them in one speaker: (start s, step s, notes Hz),
@@ -1242,15 +1246,30 @@ while True:
     else:
         p0_since, p0_done = None, False
 
-    # buttons: A = next, B = previous (ignored in standby so bumps don't wake it)
+    # buttons: A = next, B = previous, A + B together = switch set (like pad 1).
+    # A press waits CHORD s to see if the other joins it. Ignored in standby so
+    # bumps don't wake it.
     ev = keys.events.get()
     while ev:
+        k = ev.key_number
+        held[k] = ev.pressed
         if ev.pressed and power == "on":
+            if held[1 - k]:
+                pending = None
+                if mode != "idle":
+                    denied()
+                else:
+                    change(new_set="alt" if cur_set == "os" else "os")
+            else:
+                pending = (k, now)
+        ev = keys.events.get()
+    if pending and now - pending[1] > CHORD:
+        k, pending = pending[0], None
+        if power == "on":
             if mode != "idle":
                 denied()
             else:
-                change(d=1 if ev.key_number == 0 else -1)
-        ev = keys.events.get()
+                change(d=1 if k == 0 else -1)
 
     if power == "waking":
         display.brightness = 1.0 if (now - power_t) % 0.5 < 0.25 else 0.15
