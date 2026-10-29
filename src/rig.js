@@ -28,10 +28,10 @@ const DEFAULT_HAT = {
   effect: 0,                          // transition between frames (spotled EFFECTS)
   ms: 200,                            // frame time for uploaded animations
   lightning: 3,                       // Rainfall strikes per loop: 0 off .. 3 storm
-  clock: false,                       // show a clock instead (wins over follow / image)
-  clockStyle: 'static',               // 'static' big HH:MM + date, or 'ticker'
+  clockStyle: 'static',               // the hat's clock in WATCH: 'static' big HH:MM + date, or 'ticker'
 };
 const CLOCK_CHECK_MS = 15000;         // the hat only gets a new upload when the minute changes
+const WATCH_IDX = SETS.alt.modes.findIndex((m) => m.key === 'W');
 
 function load() {
   try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch { return {}; }
@@ -110,7 +110,7 @@ export class Rig extends EventTarget {
     setInterval(() => { if (this.clue.connected) this.clue.send(cmd.time()); }, 10 * 60 * 1000);
     // Hat clock: check often, but showClock's signature only changes with the minute,
     // so the hat is only reconnected and re-sent once a minute.
-    setInterval(() => { if (this.state.hat.clock) this.pushCap(); }, CLOCK_CHECK_MS);
+    setInterval(() => { if (this.watching()) this.pushCap(); }, CLOCK_CHECK_MS);
   }
 
   _save() {
@@ -121,7 +121,8 @@ export class Rig extends EventTarget {
   /** What the rig looks like right now, for the devices that follow it. */
   _rigSig() {
     const { pair, rainbow, tunes } = this.state;
-    return JSON.stringify([look(this.state), pair, rainbow, tunes]);
+    // watching(): WATCH looks like DARK, but the hat swaps to its clock.
+    return JSON.stringify([look(this.state), pair, rainbow, tunes, this.watching()]);
   }
 
   _update(patch) {
@@ -168,7 +169,7 @@ export class Rig extends EventTarget {
     const h = this.state.hat, lk = look(this.state);
     if (lk.on && lk.text) {
       this.cap.showMessage(lk.text, lk.rgb, null);
-    } else if (h.clock && lk.on && !this.state.egg && !this.state.hacked) {
+    } else if (h.follow && this.watching()) {           // WATCH: the CLUE's clock face, the hat's clock
       this.cap.showClock(h.clockStyle);
     } else if (h.follow || !lk.on || !this.hatImage || this.state.egg || this.state.hacked) {
       this.cap.applyState({ ...this.state, look: lk });
@@ -208,7 +209,7 @@ export class Rig extends EventTarget {
       if (patch.brightness !== undefined) await this.cap.setBrightness(this.state.hat.brightness);
       if (patch.screen !== undefined) await this.cap.setScreenMode(this.state.hat.screen);
       if (patch.follow !== undefined || patch.ms !== undefined || patch.effect !== undefined
-        || patch.clock !== undefined || patch.clockStyle !== undefined) this.pushCap();
+        || patch.clockStyle !== undefined) this.pushCap();
       else if (patch.lightning !== undefined && this.state.hat.follow) this.pushCap();
     };
     if (now) go(); else this._debounce('hat', 250, go);
@@ -217,11 +218,24 @@ export class Rig extends EventTarget {
   setHatImage(frames) {
     this.hatImage = frames;
     this.hatImageId = (this.hatImageId || 0) + 1;
-    this.setHat({ follow: false, clock: false }, { now: true });
+    this.setHat({ follow: false }, { now: true });
   }
 
   get locked() {
     return this.state.hacked;
+  }
+
+  /** The rig is in WATCH (and nothing has cut in): the CLUE shows its clock face and
+   *  the hat, when it follows the rig, shows its clock with it. */
+  watching() {
+    const s = this.state;
+    return s.set === 'alt' && s.idx.alt === WATCH_IDX && look(s).on && !s.egg && !s.hacked;
+  }
+
+  /** HAT tab CLOCK: the whole rig to WATCH, the hat following it. */
+  watch() {
+    this.setHat({ follow: true }, { now: true });
+    return this.setMode('alt', WATCH_IDX);
   }
 
   // ---------- rig commands (optimistic: the CLUE's report confirms or corrects) ----------
