@@ -663,7 +663,7 @@ ble.name = "RIG-CLUE"
 SIDES = ("L", "R")
 links = {s: None for s in SIDES}   # side -> (connection, Bluefruit's UART); we are central
 next_scan = 0.0
-phone = UARTService(buffer_size=1024)   # our UART for the phone (we are peripheral); a picture fits whole
+phone = UARTService()    # our UART for the phone (we are peripheral); its 512-byte buffer holds a whole picture
 phone_adv = ProvideServicesAdvertisement(phone)
 phone_up = False
 next_adv = 0.0
