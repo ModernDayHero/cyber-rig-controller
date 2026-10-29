@@ -248,7 +248,7 @@ function drawText(cv, text, ox, oy, color) {
 
 const PURPLE = [160, 60, 255], MAG = [255, 43, 214], CYAN = [0, 229, 255];
 const RED = [255, 30, 30], GREEN = [34, 255, 102], WHITE = [255, 255, 255], BLACK = [0, 0, 0];
-const BASE = { PURPLE, MAG, CYAN, RED, GREEN: [20, 255, 30], WHITE };   // matrix: pure green on this panel
+const BASE = { PURPLE, MAG, CYAN, RED, GREEN: [20, 255, 30], WHITE, AMBER: [255, 170, 0], NEONP: [255, 20, 150], HOT: [255, 110, 0] };   // matrix: pure green on this panel
 const GHOST = [150, 160, 200], PUMPKIN = [255, 80, 0], CANDLE = [255, 190, 30];   // /boo, /pumpkin
 // Heartbeat trace: offset from the baseline per column (negative = up), one beat per 32 px.
 const ECG = Array.from({ length: 32 }, (_, x) => ({ 6: -1, 7: -1, 10: 1, 11: -6, 12: 3, 13: 1, 17: -2, 18: -2, 19: -1 })[x] ?? 0);
@@ -271,7 +271,7 @@ export function lookFrames(look, s, w = 32, h = 16) {
 }
 
 function lookFramesRaw(look, s, w, h) {
-  const { PURPLE, MAG, CYAN, RED, GREEN, WHITE } = lookPalette(s, look.key, BASE);
+  const { PURPLE, MAG, CYAN, RED, GREEN, WHITE, AMBER, NEONP, HOT } = lookPalette(s, look.key, BASE);
   const HEAD = GREEN === BASE.GREEN ? [210, 255, 210] : GREEN.map((v) => Math.min(255, (v >> 1) + 128));
   const frame = (fn) => {
     const px = new Uint8Array(w * h);
@@ -536,6 +536,58 @@ function lookFramesRaw(look, s, w, h) {
         for (const [bx, b0] of [[4, 0], [14, 5], [27, 10]]) cv.set(bx, h - 1 - ((b0 + f * 2) % h), [100, 180, 255]);
         return cv.frame();
       }) };
+    }
+    case 'n': { // netrun: a hex data stream, a magenta progress bar filling along the bottom
+      const n = 10, HEX = '0123456789ABCDEF';
+      const line = () => Array.from({ length: 8 }, () => HEX[Math.floor(r() * 16)]).join('');
+      return { ms: 120, frames: Array.from({ length: n }, (_, f) => {
+        const cv = canvas(w, h);
+        drawText(cv, line(), 0, 1, CYAN);
+        drawText(cv, line(), 0, 7, scale(CYAN, 0.45));
+        for (let x = 0; x < Math.round((f + 1) * w / n); x++) { cv.set(x, 14, MAG); cv.set(x, 15, scale(MAG, 0.4)); }
+        return cv.frame();
+      }) };
+    }
+    case 's': { // scanner: a radar sweep, a contact that lights as the beam passes, a lock-on
+      const n = 12, cx = 15.5, cy = 7.5, R = 7.2, blip = Math.atan2(4.5 - cy, 21 - cx);
+      return { ms: 140, frames: Array.from({ length: n }, (_, f) => {
+        const a = (f / n) * 2 * Math.PI, lock = f === n - 1;
+        return frame((x, y) => {
+          const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy);
+          if (d > R + 0.5) return BLACK;
+          if (lock && Math.abs(d - R) < 0.6) return WHITE;
+          const behind = ((a - Math.atan2(dy, dx)) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+          if (x === 21 && y === 5) return behind < 1.6 ? AMBER : scale(AMBER, 0.15);   // the contact
+          if (Math.abs(d - R) < 0.5 || (Math.abs(dx) < 0.6 || Math.abs(dy) < 0.6)) return scale(AMBER, 0.18);
+          if (behind < 0.35) return AMBER;
+          if (behind < 1.2) return scale(AMBER, 0.45 * (1 - behind / 1.2));
+          return BLACK;
+        });
+      }) };
+    }
+    case 'e': { // neon: a buzzing OPEN sign, the tube flickering, the border dropping out
+      const plan = [1, 1, 0.25, 1, 1, 'b', 1, 0.6];
+      return { ms: 160, frames: plan.map((p) => {
+        const cv = canvas(w, h);
+        if (p !== 'b') for (let x = 0; x < w; x++) { cv.set(x, 0, CYAN); cv.set(x, h - 1, CYAN); }
+        if (p !== 'b') for (let y = 0; y < h; y++) { cv.set(0, y, CYAN); cv.set(w - 1, y, CYAN); }
+        const k = p === 'b' ? 1 : p;
+        [...'OPEN'].forEach((ch, i) => (FONT[ch] || []).forEach((row, gy) => [...row].forEach((q, gx) => {
+          if (q === '#') for (let t = 0; t < 4; t++) cv.set(2 + i * 7 + gx * 2 + (t & 1), 3 + gy * 2 + (t >> 1), scale(NEONP, k));
+        })));
+        return cv.frame();
+      }) };
+    }
+    case 'o': { // overclock: a heat meter, bars surging, amber at the bottom to white-hot at the top
+      const n = 10;
+      return { ms: 110, frames: Array.from({ length: n }, (_, f) => frame((x, y) => {
+        const b = Math.floor(x / 4), row = h - 1 - y;
+        if (x % 4 === 3) return BLACK;
+        const lvl = Math.round(h * (0.25 + 0.75 * Math.abs(Math.sin(f * 0.6 + b * 0.9)) ** 1.4));
+        if (row >= lvl) return BLACK;
+        const heat = row / h;
+        return heat > 0.8 ? WHITE : scale(HOT, 0.5 + heat);
+      })) };
     }
     case 'pic': { // a library picture (library.js): its 16x16 art in the middle
       const { palette, rows } = indexed(look.pic), cols = palette.map(rgb);

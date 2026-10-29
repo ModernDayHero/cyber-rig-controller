@@ -17,12 +17,14 @@
 #           hold 5 s again: ACTIVE. Power-up and wake blink white, then land
 #           on STEAMWorkz OS // DARK (purple).
 #   Pad 1   tap: switch set, STEAMWorkz OS <-> ALT
-#             OS:  DARK / GLITCH / RAINFALL (blue rain + lightning) / MATRIX
+#             OS:  DARK / GLITCH / RAINFALL (blue rain + lightning) / MATRIX /
+#                  HEARTBEAT (beating heart) / NETRUN / SCANNER
 #                  screen: terminal + Octlet
 #             ALT: AUDIO VU (live meter, Octlet riding the bars; rig runs its own VU) /
 #                  RAINBOW (rainbow wave screen, rig rainbow) /
 #                  REBREATHER (rig breathes between two colors) /
-#                  HACK (releases the virus now; after a cure a hand wave re-releases it)
+#                  HACK (releases the virus now; after a cure a hand wave re-releases it) /
+#                  WATCH (clock face) / SIGN OFF / NEON / OVERCLOCK (terminal speeds up as it moves)
 #           A/B only ever cycle inside the current set; pad 1 is the set switch.
 #   Pad 2   color picker for REBREATHER (jumps there from any mode):
 #           tap = COLOR PICKER 1 (white LEDs + live color block, rig previews it),
@@ -97,6 +99,8 @@ SETS = {
         (b"r", "RAINFALL",   0xB040FF, "term"),   # purple/magenta/cyan rain + lightning
         (b"M", "MATRIX",     GREEN,    "term"),
         (b"h", "HEARTBEAT",  RED,      "heart"),    # red lub-dub pulse, a beating heart on screen
+        (b"n", "NETRUN",     CYAN,     "term"),     # cyan packets racing round, jacking in
+        (b"s", "SCANNER",    0xFFAA00, "term"),     # slow targeting sweep, lock-on flash
     ],
     "alt": [
         (b"A", "AUDIO VU",   0xFFC800, "vu"),
@@ -105,6 +109,8 @@ SETS = {
         (b"H", "HACK",       RED,      "term"),     # on demand: releases the virus
         (b"D", "WATCH",      0x39B6C0, "watch"),    # clock face; the rig runs Dark meanwhile
         (b"P", "SIGN OFF",   WHITE,    "term"),     # rig flares white, then fades out
+        (b"e", "NEON",       0xFF1496, "term"),     # pink / cyan neon sign, buzzing
+        (b"o", "OVERCLOCK",  0xFF6E00, "term"),     # amber -> white-hot, faster as you move
     ],
 }
 SET_NAMES = {"os": "STEAMWorkz OS", "alt": "ALT"}
@@ -302,6 +308,15 @@ VIRUS_TEXT = [
     "!! uplink REROUTED", "!! kernel {:08b}", "!! RESISTANCE IS 0x00",
 ]
 GLITCH = "#%&@$!?/\\|<>=+*"
+# The terminal modes' own lines, and every how many loops one is added.
+MODE_TEXT = {
+    b"n": (("> jack in // node 0x{:04X}", "> trace 10.0.{}.1", "> ICE probe {:08b}", "> breach {}%",
+            "> daemon.inject 0x{:04X}", "> netrun ok // {}ms"), 2),
+    b"s": (("> scanning sector {}", "> sweep {} deg", "> contact? 0x{:04X}", "> range {}m",
+            "> TARGET ACQUIRED", "> lock {:08b}"), 8),
+    b"e": (("> NEON // OPEN 24/7", "> buzz {}hz", "> tube {} ok", "> glow 0x{:04X}"), 10),
+    b"o": (("> core {}C", "> clock {}00 MHz", "> volts 1.{}", "> OVERCLOCK x{}"), 6),
+}
 
 def fill(tmpl):
     return tmpl.format(random.randint(0, 0xFFFF) if "X}" in tmpl
@@ -1505,6 +1520,14 @@ while True:
             elif cur()[0] == b"M" and not locked:
                 if t % 3 == 0:
                     term_push(rain_line(), text_color(), down=True)
+            elif cur()[0] in MODE_TEXT and not locked:
+                lines, every = MODE_TEXT[cur()[0]]
+                if cur()[0] == b"o":       # overclock: the more the CLUE moves, the faster
+                    ax, ay, az = accel()
+                    every = max(1, every - int(abs(math.sqrt(ax * ax + ay * ay + az * az) - 9.8)))
+                if t % every == 0:
+                    c = random.choice((0xFF1496, CYAN)) if cur()[0] == b"e" else text_color()
+                    term_push(fill(random.choice(lines)), c)
             elif t % 6 == 0:
                 term_push(fill(random.choice(IDLE_TEXT)), text_color())
             if now < startle_until:

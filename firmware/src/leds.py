@@ -26,6 +26,11 @@
 #   f fish     ocean blues rolling round, bubbles sparkling             (phone /fish)
 #   u middle   punchy magenta / red strobe, three jabs a second         (phone /middle)
 #   c censor   fast hot-pink strobe                        (phone /boobs, /dick ...)
+#   n netrun   three cyan packets racing round, a faint magenta trace behind
+#   s scanner  slow amber sweep, a white lock-on flash every 4 s
+#   e neon     half hot-pink, half cyan, buzzing; a half drops out now and then
+#   o overclock  a chase that speeds up and heats from amber to white as the board
+#              moves (its own accelerometer); white-hot strobes when it's going hard
 #   Q m        mute (2 bytes): m = 1 silences every sound, 0 lets them play
 #   N k s      alert (3 bytes) over whatever mode is running: k = c call (holo-call
 #              ring spinning round) / m message (three cyan flashes); s = 1 also beeps
@@ -67,11 +72,14 @@ GHOST = (150, 160, 200)
 ORANGE = (255, 80, 0)
 CANDLE = (255, 170, 20)
 
+AMBER = (255, 170, 0)
+HOT = (255, 110, 0)
+NEON_P = (255, 20, 150)
 BLOOD = (200, 0, 10)
 FRANK = (60, 255, 40)
 SEA, SEA2 = (0, 60, 255), (0, 200, 200)
 
-MODE_CHARS = "DXHhMRPAIFVWOrGJvkfuc"
+MODE_CHARS = "DXHhMRPAIFVWOrGJvkfucnseo"
 PACKETS = {"C": 3, "B": 6, "S": 3, "Z": 8, "N": 2, "Q": 1}   # command -> number of data bytes that follow
 
 # Sounds. Segments: (start s, step s, notes Hz, side); the notes play one after
@@ -198,8 +206,11 @@ VU_RIGHT = (5, 6, 7, 8, 9)
 VU_COLORS = ((0, 255, 40), (90, 255, 0), (255, 200, 0), (255, 110, 0), (255, 0, 0))
 
 class Lens:
-    def __init__(self, pixels, key, mic=None, buzz=None):
+    def __init__(self, pixels, key, mic=None, buzz=None, accel=None):
         self.mic = mic            # Mic() enables mode A
+        self.accel = accel        # LIS3DH: overclock follows the motion (else it idles)
+        self.energy = 0.0         # overclock: 0 still .. 1 going hard
+        self.oc_phase = 0.0
         self.buzz = buzz          # Buzzer() lets alerts beep
         self.alert_k = None       # N alert showing over the mode: "c" / "m"
         self.alert_t = 0.0
@@ -413,6 +424,37 @@ class Lens:
             return scale(FRANK, 0.3 + 0.25 * math.sin(t * 2 + i * 0.6))
         if m == "c":
             return MAG if (t * 8) % 1 < 0.5 else scale(MAG, 0.12)
+        if m == "n":
+            idx = N - 1 - i if key % 2 else i
+            best = 0.0
+            for k in range(3):                       # three packets, a third of a lap apart
+                d = (t * N * 1.6 + k * N / 3 - idx) % N
+                best = max(best, 1 - d / 2.5)
+            if best > 0:
+                return scale(self._col("n", 0, CYAN), 0.08 + 0.92 * best)
+            return scale(self._col("n", 1, MAG), 0.05)
+        if m == "s":
+            if t % 4.0 < 0.2:
+                return scale(WHITE, 0.8)             # lock-on
+            idx = N - 1 - i if key % 2 else i
+            d = abs(idx - (t * N * 0.3) % N)
+            d = min(d, N - d)
+            return scale(self._col("s", 0, AMBER), max(0.0, 1 - d / 1.5) ** 2 * 0.95 + 0.03)
+        if m == "e":
+            pink = (i < 5) != bool(key % 2)          # mirror the halves across the mask
+            if self.cut > 0 and pink:
+                return scale(NEON_P, 0.1)            # that half's tube flickers out
+            c = self._col("e", 0, NEON_P) if pink else self._col("e", 1, CYAN)
+            return scale(c, 0.8 + 0.15 * math.sin(t * 47 + i))   # the buzz
+        if m == "o":
+            e = self.energy
+            if e > 0.7 and random.random() < 0.15:
+                return WHITE                         # white-hot strobe
+            idx = N - 1 - i if key % 2 else i
+            w = 0.5 + 0.5 * math.sin(self.oc_phase * 6.283 + idx * 0.9)
+            c = self._col("o", 0, HOT)
+            c = (c[0] + (255 - c[0]) * e, c[1] + (255 - c[1]) * e, c[2] + (255 - c[2]) * e)
+            return scale(c, 0.15 + 0.85 * w)
         if m == "u":
             p = (t * 3) % 1
             if p < 0.3:
@@ -482,6 +524,18 @@ class Lens:
             self.flash_c = self._col("r", 0, MAG) if random.random() > 0.5 else self._col("r", 1, CYAN)
         if self.mode == "G" and now > self.flash + 2 and random.random() < 0.006:
             self.flash = now + 0.15                         # ghost: boo
+        if self.mode == "o":                 # overclock: motion -> energy -> chase speed
+            if self.accel:
+                try:
+                    x, y, z = self.accel.acceleration
+                    jolt = min(1.0, abs(math.sqrt(x * x + y * y + z * z) - 9.8) / 6)
+                except Exception:
+                    jolt = 0.0
+            else:
+                jolt = 0.25 + 0.2 * math.sin(now * 0.5)   # no sensor: idles warm
+            # jumps up fast, cools off slowly
+            self.energy = jolt if jolt > self.energy else self.energy - (self.energy - jolt) * min(1, dt * 0.8)
+            self.oc_phase += dt * (0.3 + 3.0 * self.energy)
         if self.mode == "R":                 # integrate, so speed changes stay smooth
             sp, _, fwd = self.rb
             self.rb_phase += dt * 0.06 * sp / 50 * (1 if fwd else -1)

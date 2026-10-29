@@ -80,7 +80,7 @@ const rnd = (seed) => () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) /
 
 const PURPLE = [160, 60, 255], MAG = [255, 43, 214], CYAN = [0, 229, 255];
 const RED = [255, 30, 30], GREEN = [34, 255, 102], GREEN_HEAD = [200, 255, 216], WHITE = [255, 255, 255];
-const BASE = { PURPLE, MAG, CYAN, RED, GREEN, WHITE };
+const BASE = { PURPLE, MAG, CYAN, RED, GREEN, WHITE, AMBER: [255, 170, 0], NEONP: [255, 20, 150], HOT: [255, 110, 0] };
 const HEART = ['.##..##.', '########', '########', '.######.', '..####..', '...##...', '........', '........'];
 const dim = (c, k) => c.map((v) => Math.round(v * k));
 
@@ -92,7 +92,7 @@ function wheel(h) {
 
 /** {palette: [[r,g,b]...] (<=16), frames: [8x8 grids], fps, fade} for a rig look. */
 export function lookAnimation(look, s) {
-  const { PURPLE, MAG, CYAN, RED, GREEN, WHITE } = lookPalette(s, look.key, BASE);   // tuned colours
+  const { PURPLE, MAG, CYAN, RED, GREEN, WHITE, AMBER, NEONP, HOT } = lookPalette(s, look.key, BASE);   // tuned colours
   const GREEN_HEAD_T = GREEN === BASE.GREEN ? GREEN_HEAD : GREEN.map((v) => Math.min(255, (v >> 1) + 128));
   const r = rnd(4821);
   switch (look.key) {
@@ -233,6 +233,44 @@ export function lookAnimation(look, s) {
       const b = ['........', '.......3', '..111..1', '.211111.', '.1111111', '..111..1', '.3......', '........'];
       const at = (p) => grid((x, y) => (p[y][x] === '.' ? 0 : Number(p[y][x])));
       return { palette: [[0, 20, 60], [255, 140, 26], [0, 0, 0], [150, 200, 255]], frames: [at(a), at(b)], fps: 3, fade: false };
+    }
+
+    case 'n': { // netrun: three cyan packets racing round the edge over a faint magenta trace
+      const ring = [];
+      for (let i = 0; i < 7; i++) ring.push([i, 0]);
+      for (let i = 0; i < 7; i++) ring.push([7, i]);
+      for (let i = 7; i > 0; i--) ring.push([i, 7]);
+      for (let i = 7; i > 0; i--) ring.push([0, i]);
+      const frames = Array.from({ length: 14 }, (_, f) => {
+        const g = grid(() => 0);
+        ring.forEach(([x, y], i) => {
+          const d = Math.min(...[0, 1, 2].map((k) => (f * 2 + k * 9 + 28 - i) % 28));   // to the nearest packet
+          g[y][x] = d === 0 ? 3 : d <= 2 ? 2 : 1;
+        });
+        return g;
+      });
+      return { palette: [[0, 0, 0], dim(MAG, 0.15), dim(CYAN, 0.5), CYAN], frames, fps: 10, fade: false };
+    }
+
+    case 's': { // scanner: a sweep turning round the middle, a lock-on flash
+      const frames = Array.from({ length: 8 }, (_, f) => grid((x, y) => {
+        const a = Math.atan2(y - 3.5, x - 3.5), sweep = (f / 8) * 2 * Math.PI - Math.PI;
+        const behind = ((sweep - a) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+        return behind < 0.5 ? 2 : behind < 1.4 ? 1 : 0;
+      }));
+      frames.push(grid(() => 3));                              // lock-on
+      return { palette: [[0, 0, 0], dim(AMBER, 0.3), AMBER, dim(WHITE, 0.7)], frames, fps: 8, fade: false };
+    }
+
+    case 'e': { // neon: pink half, cyan half, the pink tube flickering out now and then
+      const at = (pk) => grid((x) => (x < 4 ? pk : 3));
+      return { palette: [[0, 0, 0], NEONP, dim(NEONP, 0.15), CYAN], frames: [at(1), at(1), at(2), at(1), at(1), at(1)], fps: 5, fade: false };
+    }
+
+    case 'o': { // overclock: a chase heating from amber to white, strobing
+      const frames = Array.from({ length: 8 }, (_, f) => grid((x, y) => ((x + y + f) % 8 < 2 ? 2 : (x + y + f) % 8 < 4 ? 1 : 0)));
+      frames[5] = grid(() => 3);                               // strobe
+      return { palette: [[0, 0, 0], dim(HOT, 0.5), HOT, WHITE], frames, fps: 10, fade: false };
     }
 
     case 'pic': { // a library picture (library.js), 16x16 halved: each 2x2 block takes

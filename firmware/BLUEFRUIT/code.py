@@ -24,8 +24,19 @@ BRIGHTNESS = 0.3   # heat + battery rule
 MODES = "DXrMAR"    # local backup: CLUE OS modes, then VU + rainbow
 
 px = neopixel.NeoPixel(board.NEOPIXEL, 10, brightness=BRIGHTNESS, auto_write=False)
+def motion():
+    """The onboard LIS3DH, for OVERCLOCK; None if it won't start (the mode then idles)."""
+    try:
+        import busio
+        import adafruit_lis3dh
+        i2c = busio.I2C(board.ACCELEROMETER_SCL, board.ACCELEROMETER_SDA)
+        return adafruit_lis3dh.LIS3DH_I2C(i2c, address=0x19)
+    except Exception as e:
+        print("accel:", e)
+        return None
+
 KEY = 0 if SIDE == "L" else 1
-lens = Lens(px, key=KEY, mic=Mic(), buzz=Buzzer(KEY))
+lens = Lens(px, key=KEY, mic=Mic(), buzz=Buzzer(KEY), accel=motion())
 
 ble = BLERadio()
 ble.name = "RB-" + SIDE

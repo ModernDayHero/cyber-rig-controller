@@ -12,6 +12,8 @@ export const SETS = {
       { key: 'r', name: 'Rainfall', color: '#B040FF', alt: '#00E5FF', hint: 'rain + lightning' },
       { key: 'M', name: 'Matrix',   color: '#22FF66', hint: 'green digital rain' },
       { key: 'h', name: 'Heartbeat', color: '#FF1E1E', hint: 'lub-dub pulse' },
+      { key: 'n', name: 'Netrun',   color: '#00E5FF', alt: '#FF2BD6', hint: 'packets racing, jacking in' },
+      { key: 's', name: 'Scanner',  color: '#FFAA00', hint: 'targeting sweep, lock-on' },
     ],
   },
   alt: {
@@ -24,6 +26,8 @@ export const SETS = {
       // Clock face on the CLUE; the mask / hat / BOLT run Dark (lookAs) meanwhile.
       { key: 'W', name: 'Watch',      color: '#39B6C0', hint: 'Octlet clock', lookAs: 'D' },
       { key: 'P', name: 'Sign off',   color: '#E6E6FF', hint: 'flare, then fade out' },
+      { key: 'e', name: 'Neon',       color: '#FF1496', alt: '#00E5FF', hint: 'buzzing neon sign' },
+      { key: 'o', name: 'Overclock',  color: '#FF6E00', hint: 'heats up as you move' },
     ],
   },
 };
@@ -56,6 +60,10 @@ export const TUNE = {
   H: { bright: 100, colors: ['#FF1E1E', '#FF2BD6'], labels: ['VIRUS', 'STABS'] },
   h: { bright: 100, colors: ['#FF1E1E'],            labels: ['PULSE'] },
   P: { bright: 100, colors: ['#FFFFFF'],            labels: ['FADE'] },
+  n: { bright: 100, colors: ['#00E5FF', '#FF2BD6'], labels: ['PACKETS', 'TRACE'] },
+  s: { bright: 100, colors: ['#FFAA00'],            labels: ['SWEEP'] },
+  e: { bright: 100, colors: ['#FF1496', '#00E5FF'], labels: ['TUBE A', 'TUBE B'] },
+  o: { bright: 100, colors: ['#FF6E00'],            labels: ['CORE'] },
 };
 const tuneKey = (k) => (k === 'hack' || k === 'F' ? 'H' : k);
 
@@ -78,6 +86,10 @@ export function lookPalette(s, key, base) {
     case 'H': return { ...base, RED: a, MAG: b };
     case 'h': return { ...base, RED: a };
     case 'P': return { ...base, WHITE: a };
+    case 'n': return { ...base, CYAN: a, MAG: b };
+    case 's': return { ...base, AMBER: a };
+    case 'e': return { ...base, NEONP: a, CYAN: b };
+    case 'o': return { ...base, HOT: a };
     default: return base;
   }
 }
