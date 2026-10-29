@@ -6,10 +6,13 @@
 import { Clue } from './ble/clue.js';
 import { Bolt } from './ble/bolt.js';
 import { SpotLed } from './ble/spotled.js';
-import { BRIGHTNESS, BREATHE_IDX, DEFAULT_HACK_TIMER, DEFAULT_PAIR, DEFAULT_RAINBOW, EGGS, POWER, SETS, TUNE, cmd, look, tuneOf } from './config.js';
+import { BRIGHTNESS, BREATHE_IDX, DEFAULT_HACK_TIMER, DEFAULT_PAIR, DEFAULT_RAINBOW, POWER, SETS, TUNE, cmd, look, tuneOf } from './config.js';
+import { PIC_MS, TEXT_MS, indexed } from './library.js';
 
 const STORE_KEY = 'rig-state-v3';
 const MSG_MS = 10000;     // how long a call / message scrolls on the hat
+// A title for the hat / BOLT / CLUE: what was typed, as one upper-case ASCII word.
+const oneWord = (s) => s.toUpperCase().replace(/[^!-~]/g, '').slice(0, 19);
 
 const DEFAULT_BOLT = {
   follow: true,                       // mirror the rig's mode
@@ -146,8 +149,11 @@ export class Rig extends EventTarget {
     if (!this.bolt.connected) return;
     const b = this.state.bolt;
     const lk = look(this.state);
-    // Standby / off always wins, so the whole rig goes dark together; an egg takes over too.
-    if (b.follow || !lk.on || this.state.egg || this.state.hacked) {
+    // Standby / off always wins, so the whole rig goes dark together; a picture or word
+    // from the SAY tab takes over too.
+    if (lk.on && lk.text) {
+      this.bolt.scrollText(lk.text, lk.rgb, 12, b.brightness);
+    } else if (b.follow || !lk.on || this.state.egg || this.state.hacked) {
       this.bolt.applyState({ ...this.state, brightness: b.brightness, look: lk });
     } else {
       const c = b.content.type === 'image' && this.boltImage ? { type: 'image', anim: this.boltImage } : b.content;
@@ -160,7 +166,9 @@ export class Rig extends EventTarget {
     // A message is scrolling: it puts the look back after (an egg or the virus cut in).
     if (this.hatMsg && !this.state.egg && !this.state.hacked) return;
     const h = this.state.hat, lk = look(this.state);
-    if (h.clock && lk.on && !this.state.egg && !this.state.hacked) {
+    if (lk.on && lk.text) {
+      this.cap.showMessage(lk.text, lk.rgb, null);
+    } else if (h.clock && lk.on && !this.state.egg && !this.state.hacked) {
       this.cap.showClock(h.clockStyle);
     } else if (h.follow || !lk.on || !this.hatImage || this.state.egg || this.state.hacked) {
       this.cap.applyState({ ...this.state, look: lk });
@@ -305,34 +313,48 @@ export class Rig extends EventTarget {
     if (on) this.bolt.stabilize();
   }
 
-  /** /boo, /pumpkin, /secret: the CLUE runs the mask + its screen. The hat and BOLT
-   *  show the command first, then the egg's look, for the same time (taking over
-   *  OWN content too), then go back to what they were showing. */
-  egg(name, typed = name) {
-    const e = EGGS[name];
-    // The title is what was typed (e.g. /PIZZA before the ?): one word, ASCII.
-    const title = '/' + typed.toUpperCase().replace(/[^!-~]/g, '').slice(0, 19);
-    this.clue.send(cmd.egg(e.as || name, e.look && this.state.showCmd ? title : ''));
-    if (!e.look) return;
-    this.state.egg = e.look;                 // not saved: it only lasts e.ms
+  /** A library picture (library.js) everywhere: the phone sends the CLUE the picture
+   *  itself, the mask runs the entry's mode, the hat and BOLT show its look. `typed`
+   *  is what was typed (/boo, ghost, /pizza for the ?), shown first with TITLE: SHOW. */
+  showPic(p, typed = p.id) {
+    const title = this.state.showCmd ? oneWord(typed) : '';
+    if (p.art) for (const line of cmd.picture(indexed(p))) this.clue.send(line);
+    // The censor has no picture: its caption shows as big text instead.
+    this.clue.send(cmd.show(p.art ? 'p' : 't', p.mask, p.sound, p.rgb, title, p.caption));
+    this._takeOver({ key: p.look || 'pic', pic: p.art ? p : null, rgb: p.rgb }, title, p.ms || PIC_MS);
+  }
+
+  /** Any other word: big text on the CLUE, pages on the hat, scrolling on the BOLT. */
+  sayText(text) {
+    const t = text.toUpperCase().replace(/[^ -~]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24);
+    if (!t) return;
+    const rgb = [0, 229, 255];
+    this.clue.send(cmd.show('t', '', 'm', rgb, '', t));
+    this._takeOver({ key: 'text', text: t, rgb }, '', TEXT_MS);
+  }
+
+  /** The hat and BOLT show `egg` for `ms` (OWN content too), the title first if any,
+   *  then go back to what they were showing. */
+  _takeOver(egg, title, ms) {
+    this.state.egg = egg;                    // not saved: it only lasts ms
     clearTimeout(this._eggTimer);
     this._eggTimer = setTimeout(() => {
       this.state.egg = null;
       this.pushCap();
       this.pushBolt();
-    }, e.ms);
-    if (!this.state.showCmd) {               // TITLE: SKIP - straight to the look
+    }, ms);
+    if (!title) {                            // straight to the look
       this.pushCap();
       this.pushBolt();
       return;
     }
-    const still = () => this.state.egg === e.look;
+    const still = () => this.state.egg === egg;
     if (this.bolt.connected) {
-      this.bolt.scrollText(title, e.rgb, 12, this.state.bolt.brightness)
+      this.bolt.scrollText(title, egg.rgb, 12, this.state.bolt.brightness)
         .then(() => setTimeout(() => still() && this.pushBolt(), 2500));
     }
     if (this.cap.available) {                // the title holds while the look uploads
-      this.cap.showTitle(title.slice(0, 8), e.rgb)    // 8 characters fill the 32 px
+      this.cap.showTitle(title.slice(0, 8), egg.rgb)  // 8 characters fill the 32 px
         .then(() => setTimeout(() => still() && this.pushCap(), 1000));
     }
   }

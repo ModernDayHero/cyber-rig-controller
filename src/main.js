@@ -1,5 +1,6 @@
 import './style.css';
-import { SETS, BREATHE_IDX, RAINBOW_IDX, HACK_IDX, HACK_TIMER, RAINBOW, POWER, TUNE, EGGS, hex, rgb, modeOf, tuneOf } from './config.js';
+import { SETS, BREATHE_IDX, RAINBOW_IDX, HACK_IDX, HACK_TIMER, RAINBOW, POWER, TUNE, hex, rgb, modeOf, tuneOf } from './config.js';
+import { PICS, lookup, indexed } from './library.js';
 import { Rig } from './rig.js';
 import { decodeImage, toBolt, toHat, paintPreview, paintHat } from './image.js';
 import { EFFECTS, rgb323, fromRgb323 } from './ble/spotled.js';
@@ -169,33 +170,53 @@ const SLASH = {
   ...MODE_CMDS,
   hack: () => rig.hack(),               // the HACK mode is the virus: same thing
   purge: () => rig.purge(),
-  ...Object.fromEntries(Object.keys(EGGS).filter((n) => !EGGS[n].notCmd).map((name) => [name, () => rig.egg(name)])),
 };
-const LISTED = Object.keys(SLASH).filter((n) => !EGGS[n]?.hidden && n !== 'audio').map((n) => '/' + n).join(' ');
-// Enter: /command runs it, anything else goes out as a message. A /word that isn't
-// a command still gets a show: the word, then a big ? on the rig.
-$('alertText').addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter') return;
-  const v = $('alertText').value.trim();
-  if (!v.startsWith('/')) { sendAlert('m'); return; }
-  const word = v.slice(1).split(/\s+/)[0] || '?';
-  const run = SLASH[word.toLowerCase()];
-  if (run) run();
-  else {
-    rig.egg('huh', word);
-    showBanner(`Unknown command /${word}. Try ${LISTED}`);
-  }
-  $('alertText').value = '';
-});
+const LISTED = ['/hack', '/purge', ...Object.keys(PICS).filter((id) => PICS[id].cmd !== false).map((id) => '/' + id),
+  ...Object.keys(MODE_CMDS).filter((n) => n !== 'audio').map((n) => '/' + n)].join(' ');
 
-// ---------- views: RIG / BOLT / HAT ----------
+// SAY: a /command runs (a mode, /hack, /purge); a picture word (with or without the /)
+// shows its picture; any other word shows as text; an unknown /word gets the "?".
+function say() {
+  const v = $('alertText').value.trim();
+  if (!v) return;
+  const slash = v.startsWith('/'), body = slash ? v.slice(1) : v;
+  const run = slash && SLASH[body.split(/\s+/)[0].toLowerCase()];
+  const pic = !run && lookup(body);
+  if (run) run();
+  else if (pic) rig.showPic(pic, v);
+  else if (slash) {
+    rig.showPic(PICS.huh, v);
+    showBanner(`Unknown command ${v}. Try ${LISTED}`);
+  } else rig.sayText(v);
+  $('alertText').value = '';
+}
+$('alertText').addEventListener('keydown', (e) => { if (e.key === 'Enter') say(); });
+$('sayGo').addEventListener('click', say);
+
+// The picture library, one button each, drawn from the same art the CLUE gets.
+for (const p of Object.values(PICS)) {
+  if (p.cmd === false) continue;
+  const b = document.createElement('button');
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 16;
+  const g = cv.getContext('2d'), { palette, rows } = indexed(p);
+  rows.forEach((r, y) => r.forEach((v, x) => { if (v) { g.fillStyle = palette[v]; g.fillRect(x, y, 1, 1); } }));
+  const label = document.createElement('span');
+  label.textContent = p.id.toUpperCase();
+  b.append(cv, label);
+  b.setAttribute('aria-label', `Show ${p.id}`);
+  b.addEventListener('click', () => rig.showPic(p));
+  $('picGrid').append(b);
+}
+
+// ---------- views: RIG / BOLT / HAT / SAY ----------
 const VIEW_KEY = 'rig-view';
 let view = localStorage.getItem(VIEW_KEY) || 'rig';
 function showView(v) {
   view = v;
   try { localStorage.setItem(VIEW_KEY, v); } catch {}
   for (const b of $('views').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === v);
-  for (const k of ['rig', 'bolt', 'hat']) $(`view-${k}`).hidden = k !== v;
+  for (const k of ['rig', 'bolt', 'hat', 'say']) $(`view-${k}`).hidden = k !== v;
 }
 for (const b of $('views').querySelectorAll('button')) b.addEventListener('click', () => showView(b.dataset.view));
 showView(view);

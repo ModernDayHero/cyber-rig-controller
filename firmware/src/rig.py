@@ -46,8 +46,9 @@
 #                                   (passed to the mask, kept in NVM across restarts)
 #                  P standby|off|wake
 #                  N c|m [text]     incoming call / message: mask lights + sound everywhere
-#                  X boo|pumpkin|vamp|frank|fish|middle|secret [title]   easter egg (20 s),
-#                                   the title (/COMMAND) shown first, then back to the mode
+#                  J / I / Y        a picture (16x16, from the phone's library) or a typed
+#                                   word on screen, the mask in a mode meanwhile, then
+#                                   back (see "pictures + words" below)
 #                  Q 0|1            mute: 1 silences the CLUE and the mask (sent on connect)
 #                  H  start the hack     K  purge it     ?  report everything
 #   CLUE -> phone  M <set> <i> / C r g b r g b / R sp w dir / T min max / P on|waking|blink|off /
@@ -662,7 +663,7 @@ ble.name = "RIG-CLUE"
 SIDES = ("L", "R")
 links = {s: None for s in SIDES}   # side -> (connection, Bluefruit's UART); we are central
 next_scan = 0.0
-phone = UARTService()    # our own UART for the phone (we are peripheral)
+phone = UARTService(buffer_size=1024)   # our UART for the phone (we are peripheral); a picture fits whole
 phone_adv = ProvideServicesAdvertisement(phone)
 phone_up = False
 next_adv = 0.0
@@ -788,7 +789,7 @@ def phone_read():
         except Exception:
             phone_say("E bad")
         report()                           # answer at once, don't wait for the timer
-    if len(phone_buf) > 64:            # junk without newlines: drop it
+    if len(phone_buf) > 128:           # junk without newlines: drop it
         phone_buf = b""
 
 def phone_cmd(w):
@@ -799,6 +800,13 @@ def phone_cmd(w):
         last_rep.clear()
     elif c == "Q":                         # mute works asleep too
         set_mute(w[1] == "1")
+    elif c == "J":                         # picture palette (data lines: never refused)
+        for i, v in enumerate(w[2:]):
+            pic_pal[int(w[1]) + i] = int(v, 16)
+    elif c == "I":                         # one row of the picture
+        r, row = int(w[1]), w[2]
+        for x in range(16):
+            pic_bmp[x, r] = int(row[x], 16)
     elif c == "P":
         if w[1] in ("standby", "off") and power in ("on", "waking"):
             go_standby()
@@ -811,9 +819,8 @@ def phone_cmd(w):
     elif c == "N":                         # calls get through even while hacked
         if w[1] in ALERT_TIME:
             alert(w[1], " ".join(w[2:]))
-    elif c == "X":
-        if w[1] in EGGS or w[1] == "secret":
-            start_egg(w[1], w[2] if len(w) > 2 else "")
+    elif c == "Y":                         # a picture or a word: gets through while hacked
+        start_show(w)
     elif c == "K":
         if mode != "idle":
             term_push("> REMOTE PURGE // phone", CYAN)
@@ -1004,213 +1011,88 @@ def alert(k, text):
     else:
         term_push("> MSG // " + (text or "1 new packet"), CYAN)
 
-# ---------- easter eggs (phone X): /boo /pumpkin /vamp /frank /fish /secret ----------
-# A full-screen overlay on top of everything while the mask runs the egg's mode,
-# then everything goes back to the mode it was in. Each picture is built when its
-# egg starts and dropped when it ends, so they cost no RAM the rest of the time.
-EGG_TIME = 20.0           # long enough to outlast the hat's 3-7 s upload
-# name: (mask byte, sound, caption, caption colour, background)
-EGGS = {
-    "boo":     (b"G", "g", "BOO.",              0xA0A8C8, 0),
-    "pumpkin": (b"J", "p", "TRICK OR TREAT",    0xFF5A00, 0),
-    "vamp":    (b"v", "v", "I VANT YOUR BLOOD", 0xC00010, 0),
-    "frank":   (b"k", "k", "IT'S ALIVE!",       0x60E040, 0x081008),
-    "fish":    (b"f", "f", "BLUB BLUB",         0x60C0FF, 0x001830),
-    "middle":  (b"u", "u", "THIS ONE'S FOR YOU", 0xFF008C, 0),
-    "censor":  (b"c", "b", "NICE TRY, CHOOM",   0xFF2BD6, 0),   # /boobs /dick ... (the phone maps them)
-    "huh":     (b"X", "e", "UNKNOWN COMMAND",   0xFFC800, 0),   # any /word that isn't one
-}
-EGG_SHORT = {"huh": 5.0}  # eggs that don't run the full EGG_TIME
-egg_bg = _pal(0)
-egg = displayio.Group()
-egg.append(vectorio.Rectangle(pixel_shader=egg_bg, width=240, height=240, x=0, y=0))
-egg.append(displayio.Group())             # the picture, swapped in per egg
-egg_txt = make_text(20, 0, 4, 0xFFFFFF, scale=2)
-egg.append(egg_txt[0])
-egg.hidden = True
-root.append(egg)
-egg_k = None
-egg_end = 0.0
-egg_fx = []               # the parts egg_step animates
-egg_cap_at = 0.0          # when the /command title gives way to the caption (0 = no title)
-EGG_TITLE = 2.0
+# ---------- pictures + words from the phone (Y, with J / I for the picture) ----------
+# The phone owns the picture library: it sends a 16x16, 16-colour picture as text
+# (J palette, I rows) and then Y to show it, so pictures cost the CLUE no code or RAM
+# beyond this one bitmap. Typed words that aren't pictures come as Y t: big text.
+#   J start rrggbb ...       palette entries from `start` (up to 8 a line); 0 = background
+#   I row hhhhhhhhhhhhhhhh   one row of the picture, a hex digit per pixel
+#   Y p|t mask snd rrggbb title caption...
+#        p = the picture under the caption, t = the caption as big text
+#        mask = mode byte for the Bluefruits meanwhile (- none), snd = SOUNDS key (- none)
+#        title = shown first for SHOW_TITLE s (- none), e.g. /PUMPKIN
+SHOW_TIME = {"p": 20.0, "t": 10.0}   # long enough to outlast the hat's 3-7 s upload
+SHOW_TITLE = 2.0
+PIC_SCALE = 11                      # 16 px -> 176 px
+pic_bmp = displayio.Bitmap(16, 16, 16)
+pic_pal = displayio.Palette(16)
+show_bg = displayio.Palette(1)
+show_bg[0] = 0
+show = displayio.Group()
+show.append(vectorio.Rectangle(pixel_shader=show_bg, width=240, height=240, x=0, y=0))
+pic_grp = displayio.Group(scale=PIC_SCALE, x=(240 - 16 * PIC_SCALE) // 2, y=38)
+pic_grp.append(displayio.TileGrid(pic_bmp, pixel_shader=pic_pal))
+show.append(pic_grp)
+show_cap = make_text(20, 0, 4, 0xFFFFFF, scale=2)          # caption / title, top line
+show.append(show_cap[0])
+big = [make_text(12, 12, y, 0xFFFFFF, scale=3) for y in (80, 130)]   # text mode: 2 lines
+for b in big:
+    show.append(b[0])
+show.hidden = True
+root.append(show)
+show_k = None             # "p" / "t" while something shows
+show_end = 0.0
+show_cap_at = 0.0         # when the title gives way to the caption (0 = no title)
+show_caption = ""
 
-def _c(color, r, x, y):
-    return vectorio.Circle(pixel_shader=_pal(color) if isinstance(color, int) else color, radius=r, x=x, y=y)
+def wrap(s, n=12):
+    """Up to two lines of n characters, broken at spaces where it can."""
+    lines, cur = [], ""
+    for word in s.split():
+        while len(word) > n:
+            lines.append(word[:n])
+            word = word[n:]
+        if cur and len(cur) + 1 + len(word) > n:
+            lines.append(cur)
+            cur = word
+        else:
+            cur = (cur + " " + word).strip()
+    lines.append(cur)
+    return (lines + ["", ""])[:2]
 
-def _r(color, w, h, x, y):
-    return vectorio.Rectangle(pixel_shader=_pal(color), width=w, height=h, x=x, y=y)
+def start_show(w):
+    global show_k, show_end, show_cap_at, show_caption
+    k, mask, snd, color = w[1], w[2], w[3], int(w[4], 16)
+    title, caption = w[5], " ".join(w[6:])
+    show_k, show_caption = k, caption
+    show_end = time.monotonic() + SHOW_TIME.get(k, 10.0)
+    show_cap_at = time.monotonic() + SHOW_TITLE if title != "-" else 0.0
+    pic_grp.hidden = k != "p"
+    for b, line in zip(big, wrap(caption) if k == "t" else ("", "")):
+        b[2][1] = color
+        set_text(b[1], "{:^12}".format(line))
+    show_cap[2][1] = color
+    top = title if title != "-" else (caption if k == "p" else "")
+    set_text(show_cap[1], "{:^20}".format(top[:20]))
+    show.hidden = False
+    if mask != "-":
+        send(mask.encode())
+    if snd in SOUNDS:
+        play(snd)
 
-def _p(color, pts):
-    return vectorio.Polygon(pixel_shader=_pal(color) if isinstance(color, int) else color, points=list(pts), x=0, y=0)
-
-def build_egg(k):
-    """-> (picture group, parts to animate)."""
-    g = displayio.Group(x=120, y=130)
-    if k == "boo":
-        g.y = 110
-        for gx in (-40, 0, 40):                      # wavy hem
-            g.append(_c(0xA0A8C8, 21, gx, 58))
-        g.append(_r(0xA0A8C8, 122, 60, -61, 0))
-        g.append(_c(0xA0A8C8, 61, 0, 0))
-        g.append(_c(0, 11, -22, -8))
-        g.append(_c(0, 11, 22, -8))
-        g.append(_c(0, 9, 0, 26))                    # "ooo"
-        return g, []
-    if k == "pumpkin":
-        face = _pal(0xFFC020)                        # one palette: the candle flickers all of it
-        g.y = 135
-        g.append(_r(0x2E8B2E, 16, 30, -8, -88))
-        for gx, r in ((-45, 55), (45, 55), (0, 65)):
-            g.append(_c(0xFF5A00, r, gx, 0))
-        for pts in (((-48, -12), (-18, -12), (-33, -38)), ((18, -12), (48, -12), (33, -38)),
-                    ((-9, 10), (9, 10), (0, -4)),
-                    ((-50, 20), (-36, 31), (-24, 22), (-12, 33), (0, 24), (12, 33), (24, 22),
-                     (36, 31), (50, 20), (38, 46), (-38, 46))):
-            g.append(_p(face, pts))
-        return g, [face]
-    if k == "vamp":                                  # a bat flapping across a blood moon
-        g.append(_c(0x900010, 72, 0, -10))
-        up, down = displayio.Group(), displayio.Group()
-        up.append(_p(0, ((-70, -25), (-45, -5), (-30, -15), (-12, 0), (12, 0), (30, -15), (45, -5),
-                         (70, -25), (55, 10), (35, 5), (20, 15), (0, 8), (-20, 15), (-35, 5), (-55, 10))))
-        down.append(_p(0, ((-65, 25), (-45, 5), (-30, 12), (-12, 0), (12, 0), (30, 12), (45, 5),
-                           (65, 25), (50, 30), (35, 18), (20, 22), (0, 10), (-20, 22), (-35, 18), (-50, 30))))
-        for b in (up, down):
-            b.append(_c(0, 11, 0, 2))
-            b.append(_p(0, ((-9, -4), (-6, -16), (-2, -6))))
-            b.append(_p(0, ((9, -4), (6, -16), (2, -6))))
-            b.append(_c(0xFF2020, 2, -4, 0))         # red eyes
-            b.append(_c(0xFF2020, 2, 4, 0))
-            g.append(b)
-        down.hidden = True
-        return g, [up, down]
-    if k == "frank":                                 # the monster, neck bolts sparking
-        g.append(_r(0x707070, 22, 14, -77, 25))
-        g.append(_r(0x707070, 22, 14, 55, 25))
-        g.append(_r(0x4CA04C, 110, 120, -55, -60))
-        g.append(_p(0, ((-58, -62), (58, -62), (58, -35), (40, -45), (25, -33), (10, -45), (-5, -33),
-                        (-20, -45), (-35, -33), (-50, -45), (-58, -35))))
-        g.append(_r(0x204020, 40, 3, -32, -24))      # forehead scar
-        for sx in (-26, -14, -2):
-            g.append(_r(0x204020, 2, 9, sx, -27))
-        g.append(_r(0, 20, 8, -36, -12))             # eyes
-        g.append(_r(0, 20, 8, 16, -12))
-        g.append(_r(0, 52, 4, -26, 32))              # stitched mouth
-        for sx in (-18, -6, 6, 18):
-            g.append(_r(0, 2, 12, sx, 28))
-        zaps = []
-        for side in (-1, 1):
-            z = _p(0xFFFF90, [(side * x, y) for x, y in
-                              ((88, 5), (98, 18), (90, 20), (104, 42), (86, 24), (94, 22))])
-            z.hidden = True
-            g.append(z)
-            zaps.append(z)
-        return g, zaps
-    if k == "fish":                                  # swimming, bubbles rising
-        g.y = 120
-        g.append(_p(0xE07010, ((40, 0), (85, -38), (78, 0), (85, 38))))       # tail
-        g.append(_p(0xE07010, ((-10, -36), (20, -58), (28, -32))))           # fin
-        g.append(_c(0xFF8C1A, 42, -12, 0))
-        g.append(_c(0xFF8C1A, 42, 12, 0))
-        g.append(_c(0xFFFFFF, 11, -32, -10))
-        g.append(_c(0, 5, -35, -10))
-        bubbles = [_c(0x80C0FF, r, -80 + i * 22, 60 - i * 40) for i, r in enumerate((6, 4, 8))]
-        for b in bubbles:
-            g.append(b)
-        return g, bubbles
-    if k == "middle":                                # a chrome cyber-hand, flipping the bird
-        chrome, glow = 0xB0B8C8, _pal(0xFF008C)
-        g.y = 140
-        g.append(_r(0x707888, 70, 40, -35, 60))      # wrist
-        g.append(_p(chrome, ((-48, 22), (-82, -8), (-70, -22), (-40, 2))))   # thumb
-        g.append(_r(chrome, 100, 70, -50, 0))        # palm
-        g.append(_r(chrome, 28, 100, -14, -96))      # the finger
-        g.append(_c(chrome, 14, 0, -96))
-        for kx in (-36, 30):                         # folded fingers
-            g.append(_c(chrome, 15, kx, -2))
-        g.append(_c(chrome, 11, 52, 4))
-        for gx, gy in ((-36, -2), (30, -2), (0, -60), (0, -20)):
-            g.append(_c(glow, 4, gx, gy))            # magenta joint lights
-        return g, [glow]
-    if k == "huh":                                   # a giant blinking ?
-        q = make_text(1, -24, -60, 0xFFC800, scale=8)  # one 6 x 14 glyph, x8
-        set_text(q[1], "?")
-        g.append(q[0])
-        return g, [q[2]]
-    if k == "censor":                                # a glitching CENSORED bar
-        g.y = 120
-        g.append(_r(0xFF2BD6, 220, 76, -110, -38))
-        g.append(_r(0, 212, 68, -106, -34))
-        word = make_text(8, -72, -21, 0xFF2BD6, scale=3)   # 8 x 18 px = 144 wide
-        set_text(word[1], "CENSORED")
-        g.append(word[0])
-        return g, []
-    return g, []
-
-def start_egg(k, title=""):
-    """title (e.g. /VAMPIRE) shows as the caption for EGG_TITLE s before the egg's own."""
-    global egg_k, egg_end, egg_fx, egg_cap_at
-    egg_k, egg_end = k, time.monotonic() + EGG_TIME
-    if k == "secret":                    # no picture: a refusal, loudly
-        egg_end = time.monotonic() + 3.0
-        send(b"X")
-        term_push("!! ACCESS DENIED // clearance: STEAMWorkz", RED)
-        term_glitch(3)
+def show_step(now):
+    global show_k, show_cap_at
+    if not show_k:
         return
-    byte, snd, caption, color, bg = EGGS[k]
-    egg_end = time.monotonic() + EGG_SHORT.get(k, EGG_TIME)
-    egg[1] = displayio.Group()           # drop the last picture before building this one
-    gc.collect()
-    egg[1], egg_fx = build_egg(k)
-    egg_bg[0] = bg
-    egg_txt[2][1] = color
-    set_text(egg_txt[1], "{:^20}".format(title[:20] or caption))
-    egg_cap_at = time.monotonic() + EGG_TITLE if title else 0.0
-    egg.hidden = False
-    send(byte)
-    play(snd)
-
-def egg_step(now):
-    global egg_k, egg_fx, egg_cap_at
-    if not egg_k:
-        return
-    art = egg[1]
-    if egg_cap_at and now > egg_cap_at:  # the /command has had its moment: the caption
-        egg_cap_at = 0.0
-        set_text(egg_txt[1], "{:^20}".format(EGGS[egg_k][2]))
-    if now > egg_end:
-        egg_k, egg_fx = None, []
-        egg.hidden = True
-        egg[1] = displayio.Group()       # free the picture
-        gc.collect()
+    if show_cap_at and now > show_cap_at:      # the /command has had its moment
+        show_cap_at = 0.0
+        set_text(show_cap[1], "{:^20}".format(show_caption[:20] if show_k == "p" else ""))
+    if now > show_end:
+        show_k = None
+        show.hidden = True
         resend()
-    elif egg_k == "boo":                 # drift and bob
-        art.x = 120 + int(14 * math.sin(now * 0.9))
-        art.y = 120 + int(10 * math.sin(now * 2.2))
-    elif egg_k == "pumpkin":             # candle flicker
-        egg_fx[0][0] = 0xFFC020 if random.random() > 0.2 else 0xFF8A00
-    elif egg_k == "vamp":                # flap, drifting across the moon
-        flap = int(now * 4) % 2
-        egg_fx[0].hidden, egg_fx[1].hidden = bool(flap), not flap
-        art.x = 120 + int(30 * math.sin(now * 0.7))
-    elif egg_k == "frank":               # sparks jump the neck bolts
-        for z in egg_fx:
-            z.hidden = random.random() > 0.25
-    elif egg_k == "huh":                 # the ? blinks
-        egg_fx[0][1] = 0xFFC800 if (now * 2) % 1 < 0.7 else 0x302400
-    elif egg_k == "censor":              # the bar glitches sideways now and then
-        art.x = 120 + (random.choice((-6, 4, 8)) if random.random() < 0.15 else 0)
-    elif egg_k == "middle":              # joint lights pulse, the hand jabs up on the beat
-        on = (now * 3) % 1 < 0.3
-        egg_fx[0][0] = 0xFF008C if on else 0x40002A
-        art.y = 134 if on else 140
-    elif egg_k == "fish":                # swim, bubbles rise and wrap
-        art.x = 120 + int(25 * math.sin(now * 0.8))
-        for b in egg_fx:
-            b.y -= 3
-            if b.y < -120:
-                b.y = 90
+    elif show_k == "p":                        # the picture bobs gently
+        pic_grp.y = 38 + int(4 * math.sin(now * 2.2))
 
 def wheel(h):
     """0..1 hue -> saturated 0xRRGGBB."""
@@ -1494,7 +1376,7 @@ while True:
         else:
             alert_k = None
             display.brightness = 1.0
-    egg_step(now)
+    show_step(now)
 
     # pad 1 tap: STEAMWorkz OS <-> ALT
     p1 = set_pad.value

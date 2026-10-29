@@ -6,7 +6,8 @@
 // by the BOLT itself, so nothing streams while it plays.
 
 import { RigDevice } from './device.js';
-import { lookPalette, tuneOf } from '../config.js';
+import { lookPalette, tuneOf, rgb } from '../config.js';
+import { indexed } from '../library.js';
 
 const API_SERVICE = '00010001-574f-4f20-5370-6865726f2121';
 const API_CHAR = '00010002-574f-4f20-5370-6865726f2121';
@@ -234,6 +235,17 @@ export function lookAnimation(look, s) {
       return { palette: [[0, 20, 60], [255, 140, 26], [0, 0, 0], [150, 200, 255]], frames: [at(a), at(b)], fps: 3, fade: false };
     }
 
+    case 'pic': { // a library picture (library.js), 16x16 halved: each 2x2 block takes
+                  // its commonest colour, background only if the block is all background
+      const { palette, rows } = indexed(look.pic);
+      const g = grid((x, y) => {
+        const n = {};
+        for (let k = 0; k < 4; k++) { const v = rows[y * 2 + (k >> 1)][x * 2 + (k & 1)]; if (v) n[v] = (n[v] || 0) + 1; }
+        return Number(Object.keys(n).sort((a, b) => n[b] - n[a])[0] ?? 0);
+      });
+      return { palette: palette.map(rgb), frames: [g, g], fps: 1, fade: false };
+    }
+
     case '?': { // an unknown /command: a blinking question mark
       const p = ['..####..', '.##..##.', '.....##.', '....##..', '...##...', '...##...', '........', '...##...'];
       const at = (on) => grid((x, y) => (on && p[y][x] === '#' ? 1 : 0));
@@ -434,7 +446,7 @@ export class Bolt extends RigDevice {
   async applyState(s) {
     const anim = s.look.on ? lookAnimation(s.look, s) : null;
     const bright = Math.round(s.brightness * tuneOf(s, s.look.key).bright / 100);   // device x mode
-    const sig = JSON.stringify([s.look.key, anim && anim.palette, anim && anim.fps, bright]);
+    const sig = JSON.stringify([s.look.key, s.look.pic?.id ?? 0, anim && anim.palette, anim && anim.fps, bright]);
     if (sig === this._shown) return;
     this._shown = sig;
     if (!anim) {

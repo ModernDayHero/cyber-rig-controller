@@ -119,32 +119,19 @@ export const cmd = {
   purge: () => 'K',
   // Incoming call ('c') / message ('m'); text = caller or message, shown on the CLUE.
   alert: (kind, text = '') => `N ${kind}${text ? ' ' + text : ''}`,
-  // title: shown on the CLUE first (TITLE: SHOW), e.g. /VAMPIRE; '' = straight to the caption.
-  egg: (name, title = '') => `X ${name}${title ? ' ' + title : ''}`,
   mute: (on) => `Q ${on ? 1 : 0}`,
   query: () => '?',
-};
-
-// Slash commands typed in the INCOMING box. Eggs: look key the hat / BOLT show
-// meanwhile (null = no picture), for as long as the CLUE runs them.
-// 20 s, same as the CLUE's EGG_TIME: the hat needs a few seconds to upload before it shows.
-// The hat and BOLT show the command (in rgb) first, then the look, whatever they were on.
-// `as` = the name the CLUE knows it by, for aliases.
-export const EGGS = {
-  boo: { look: 'G', ms: 20000, rgb: [150, 160, 200] },
-  pumpkin: { look: 'J', ms: 20000, rgb: [255, 80, 0] },
-  vamp: { look: 'v', ms: 20000, rgb: [200, 0, 10] },
-  vampire: { look: 'v', ms: 20000, rgb: [200, 0, 10], as: 'vamp' },
-  frank: { look: 'k', ms: 20000, rgb: [60, 255, 40] },
-  fish: { look: 'f', ms: 20000, rgb: [0, 150, 255] },
-  middle: { look: 'u', ms: 20000, rgb: [255, 43, 214] },
-  finger: { look: 'u', ms: 20000, rgb: [255, 43, 214], as: 'middle' },
-  // Adult party: people will try these. They all get censored (hidden: not listed anywhere).
-  ...Object.fromEntries(['boobs', 'dick', 'nudes', 'porn', 'sex'].map((n) =>
-    [n, { look: 'c', ms: 20000, rgb: [255, 43, 214], as: 'censor', hidden: true }])),
-  // Any /word that isn't a command: the word, then a big ? (not itself a command).
-  huh: { look: '?', ms: 5000, rgb: [255, 200, 0], hidden: true, notCmd: true },
-  secret: { look: null, ms: 3000 },
+  // A picture for the CLUE (library.js indexed()): palette (J, 8 colours a line, index 0
+  // the background), then the 16 rows (I, a hex digit per pixel). Then show() shows it.
+  picture: ({ palette, rows }) => [
+    ...[0, 8].filter((i) => i < palette.length)
+      .map((i) => `J ${i} ${palette.slice(i, i + 8).map((c) => c.slice(1)).join(' ')}`),
+    ...rows.map((r, y) => `I ${y} ${r.map((v) => v.toString(16)).join('')}`),
+  ],
+  // Y p (the picture) | t (caption as big text), the mask's mode meanwhile, a sound,
+  // the colour, a title shown first (one word, '' none), the caption.
+  show: (kind, mask, sound, [r, g, b], title, caption) =>
+    `Y ${kind} ${mask || '-'} ${sound || '-'} ${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')} ${title || '-'} ${caption}`,
 };
 
 export const modeOf = (s) => SETS[s.set].modes[s.idx[s.set]];
@@ -155,7 +142,8 @@ export const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 /** What the cap and BOLT should show for the current rig state: one key + colour. */
 export function look(s) {
   if (s.power === POWER.OFF || s.power === POWER.STANDBY) return { key: s.power, rgb: [0, 0, 0], on: false };
-  if (s.egg) return { key: s.egg, rgb: Object.values(EGGS).find((e) => e.look === s.egg).rgb, on: true };
+  // A picture / word from the SAY tab (rig.showPic / sayText) takes over for a while.
+  if (s.egg) return { key: s.egg.key, pic: s.egg.pic, text: s.egg.text, rgb: s.egg.rgb, on: true };
   if (s.hacked) return { key: 'hack', rgb: [255, 30, 30], on: true };
   const m = modeOf(s);
   const c = m.breathe ? s.pair[0] : rgb(m.color);

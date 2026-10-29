@@ -35,6 +35,7 @@
         <button data-view="rig">RIG</button>
         <button data-view="bolt">BOLT</button>
         <button data-view="hat">HAT</button>
+        <button data-view="say">SAY</button>
       </nav>
 
       <!-- ================= RIG ================= -->
@@ -95,6 +96,23 @@
           <span class="hint" id="hackTimerHint">every 3–5 min</span>
         </section>
 
+      </div>
+
+      <!-- ================= SAY ================= -->
+      <div class="view" id="view-say" hidden>
+        <section class="panel" aria-label="Say something">
+          <div class="row">
+            <input class="text" id="alertText" maxlength="24" placeholder="type a word, or /command" enterkeyhint="send" />
+            <button class="ghost go" id="sayGo">SHOW</button>
+          </div>
+          <span class="hint">A picture word (boo, bat, skull…) shows its picture on the CLUE, hat and BOLT; any other word shows as text. /hack /purge and /matrix-style mode names work too.</span>
+        </section>
+
+        <section class="panel" aria-label="Picture library">
+          <span class="label">PICTURES</span>
+          <div class="pics" id="picGrid"></div>
+        </section>
+
         <section class="panel" id="alertpanel" aria-label="Incoming call or message">
           <div class="row">
             <span class="label">INCOMING</span>
@@ -103,6 +121,7 @@
               <button data-kind="m">MSG</button>
             </div>
           </div>
+          <span class="hint">Rings the rig. The text box is the caller or the message.</span>
           <div class="row">
             <span class="label">SOUND</span>
             <div class="seg" id="mute">
@@ -113,12 +132,10 @@
           <div class="row">
             <span class="label">TITLE</span>
             <div class="seg" id="showCmd">
-              <button data-show="1">SHOW /CMD</button>
+              <button data-show="1">SHOW WORD</button>
               <button data-show="0">SKIP</button>
             </div>
           </div>
-          <input class="text" id="alertText" maxlength="18" placeholder="caller / message, or /command" enterkeyhint="send" />
-          <span class="hint">Enter sends a message. Try /hack /purge /boo /pumpkin /vamp /frank /fish /middle /secret, or any mode: /matrix /rainbow</span>
         </section>
       </div>
 

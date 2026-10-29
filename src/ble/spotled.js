@@ -14,7 +14,8 @@
 // a drop mid-upload reconnects and retries.
 
 import { RigDevice, Status } from './device.js';
-import { lookPalette, tuneOf } from '../config.js';
+import { lookPalette, tuneOf, rgb } from '../config.js';
+import { indexed } from '../library.js';
 
 const SERVICE = '0000ff20-0000-1000-8000-00805f9b34fb';
 const CMD_CHAR = '0000ff21-0000-1000-8000-00805f9b34fb'; // control writes + notifications
@@ -536,6 +537,14 @@ function lookFramesRaw(look, s, w, h) {
         return cv.frame();
       }) };
     }
+    case 'pic': { // a library picture (library.js): its 16x16 art in the middle
+      const { palette, rows } = indexed(look.pic), cols = palette.map(rgb);
+      const ox = Math.round((w - 16) / 2), oy = Math.round((h - 16) / 2);
+      return { ms: 1000, frames: [frame((x, y) => {
+        const px = x - ox, py = y - oy;
+        return px < 0 || px > 15 || py < 0 || py > 15 ? BLACK : cols[rows[py][px]];
+      })] };
+    }
     case '?': { // an unknown /command: a big blinking question mark
       const Y = [255, 200, 0], g = FONT['?'], ox = Math.round((w - 6) / 2), oy = Math.round((h - 10) / 2);
       return { ms: 250, frames: [1, 1, 0, 1].map((on) => {
@@ -809,7 +818,7 @@ export class SpotLed extends RigDevice {
       const cv = canvas(w, h);
       pg.forEach((line, row) => {
         const x = Math.round((w - (line.length * 4 - 1)) / 2), y = row ? 9 : 2;
-        if (first) {                                        // MSG / CALL stands out
+        if (first && head) {                                // MSG / CALL stands out
           const [hd, ...rest] = line.split(' ');
           drawText(cv, hd, x, y, head);
           if (rest.length) drawText(cv, ' ' + rest.join(' '), x + hd.length * 4, y, color);
@@ -875,7 +884,7 @@ export class SpotLed extends RigDevice {
     const anim = lookFrames(s.look, s, w, h);
     if (!anim) return;
     const k = s.look.key;
-    const sig = JSON.stringify(['look', k, k === 'B' ? s.pair : 0, k === 'R' ? s.rainbow : 0, k === 'r' ? s.hat?.lightning : 0,
+    const sig = JSON.stringify(['look', k, s.look.pic?.id ?? 0, k === 'B' ? s.pair : 0, k === 'R' ? s.rainbow : 0, k === 'r' ? s.hat?.lightning : 0,
       s.tunes?.[k === 'hack' ? 'H' : k] ?? 0]);
     await this.showFrames(anim.frames, { ms: anim.ms }, sig);
   }

@@ -91,7 +91,7 @@ body.hacked .current { animation: glitch 0.5s steps(2) infinite; }
 }
 
 /* ---------- device views ---------- */
-.views { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.views { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .views button {
   background: transparent; border: 0; border-bottom: 2px solid var(--line);
   padding: 8px 0 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.18em; color: var(--dim);
@@ -118,6 +118,16 @@ body.hacked .current { animation: glitch 0.5s steps(2) infinite; }
   padding: 12px 2px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim);
 }
 .looks button.on { color: #fff; border-color: var(--accent); box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* ---------- SAY: picture library ---------- */
+.pics { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
+.pics button {
+  display: grid; justify-items: center; gap: 6px; padding: 10px 4px 8px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; color: var(--dim); font-size: 10px; letter-spacing: 0.08em;
+}
+.pics button:active { border-color: var(--accent); }
+.pics canvas { width: 48px; height: 48px; image-rendering: pixelated; }
+.ghost.go { flex: none; padding: 12px 16px; border-radius: 6px; font-weight: 700; letter-spacing: 0.06em; }
 
 /* ---------- BOLT drive stick ---------- */
 .stick {
