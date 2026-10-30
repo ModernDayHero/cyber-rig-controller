@@ -41,8 +41,12 @@ import { SETS } from './config.js';
 import { PICS, MINE, lookup } from './library.js';
 import { ascii } from './i18n.js';
 
-// Any ntfy server: ntfy.sh to start, our own (e.g. on the NAS) later: SET -> GUESTS.
-export const DEFAULT_RELAY = 'https://ntfy.sh';
+// Our own relay (worker/relay on Cloudflare); any ntfy server works too: SET -> GUESTS.
+export const DEFAULT_RELAY = 'https://relay.steamworkz.net';
+const OLD_DEFAULT = 'https://ntfy.sh';     // the first default: its free quota is too small
+// On the live site the owner's deck (deck.) sits behind a login; guests get the same
+// site at jack., which has none.
+const GUEST_SITE = { 'deck.steamworkz.net': 'https://jack.steamworkz.net/' };
 export const GUEST_MINUTES = [5, 10, 30, 60];
 const STORE_KEY = 'rig-guests';
 const RUNNERS_KEY = 'rig-runners';
@@ -97,7 +101,9 @@ export class GuestHost extends EventTarget {
     try { saved = JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch {}
     this.minutes = GUEST_MINUTES.includes(saved.minutes) ? saved.minutes : 10;
     this.topic = saved.topic || null;
-    this.relay = saved.relay || DEFAULT_RELAY;
+    // A relay saved before ours existed was just the old default: move it over, once.
+    this.relay = saved.relay && !(saved.relay === OLD_DEFAULT && !saved.relayChosen) ? saved.relay : DEFAULT_RELAY;
+    this.relayChosen = !!saved.relayChosen;
     this.open = false;
     // Guests in (a reload of this page keeps them) and passwords not used yet.
     this.guests = new Map((saved.guests || []).filter(([, x]) => x.until > Date.now()));
@@ -132,7 +138,7 @@ export class GuestHost extends EventTarget {
   /** The guest page's address for this session (made on first use, kept after). */
   get link() {
     if (!this.topic) { this.topic = 'cd' + rand(20); this._save(); }
-    let here = location.href.split('#')[0].split('?')[0].replace(/[^/]*$/, '');
+    let here = GUEST_SITE[location.hostname] || location.href.split('#')[0].split('?')[0].replace(/[^/]*$/, '');
     // Dev on localhost: guests' phones can't reach "localhost", so use the PC's Wi-Fi address.
     if (import.meta.env?.DEV && typeof __LAN_HOST__ === 'string' && __LAN_HOST__ && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
       here = here.replace(location.hostname, __LAN_HOST__);
@@ -142,8 +148,8 @@ export class GuestHost extends EventTarget {
   }
 
   _save() {
-    const { topic, relay, open, minutes, invites, board, gate, turnSec } = this;
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ topic, relay, open, minutes, invites, board, gate, turnSec, guests: [...this.guests] })); } catch {}
+    const { topic, relay, relayChosen, open, minutes, invites, board, gate, turnSec } = this;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ topic, relay, relayChosen, open, minutes, invites, board, gate, turnSec, guests: [...this.guests] })); } catch {}
   }
   /** This phone's runner record (made on first sight), kept current with their handle. */
   _runner(g, x) {
@@ -234,6 +240,7 @@ export class GuestHost extends EventTarget {
     const was = this.open;
     if (was) this.disable();
     this.relay = u.origin;
+    this.relayChosen = true;
     if (was) this.enable();
     this._changed();
     return true;

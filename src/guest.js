@@ -103,8 +103,10 @@ function note(msg, ms = 4000) {
 }
 
 // ---------- the link ----------
+// -> true if the relay took it. A refusal (busy, over quota, down) says so instead of hanging.
 const post = (msg) => fetch(`${RELAY}/${topic}`, { method: 'POST', body: JSON.stringify({ ...msg, g: me.g, k: me.k }) })
-  .catch(() => note(t.noSignal));
+  .then((r) => { if (!r.ok) note(t.relayBusy, 6000); return r.ok; })
+  .catch(() => { note(t.noSignal); return false; });
 
 let cooling = false;
 function act(msg) {
@@ -195,7 +197,11 @@ async function join(again = false) {
   screen('gWait', 'stKnocking');
   $('gWaitHint').textContent = t.checking;
   await opened;
-  post({ t: 'join', name, p, lang: me.lang });
+  if (!await post({ t: 'join', name, p, lang: me.lang })) {
+    $('gWaitHint').textContent = t.relayBusy;
+    setTimeout(() => !$('gWait').hidden && screen('gJoin', 'stOffline'), 4000);
+    return;
+  }
   clearTimeout(join.t);
   join.t = setTimeout(() => {
     if (!$('gWait').hidden) {

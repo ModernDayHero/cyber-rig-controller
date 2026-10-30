@@ -14,6 +14,7 @@ export const LANGS = [
 
 const T = {
   en: {
+    relayBusy: "The rig's relay refused that (busy or down). Try again in a moment.",
     opYou: "YOU'RE THE OPERATOR",
     inLine: "IN LINE #{n} · about {t}",
     moveUp: "win DEBUG to move up",
@@ -117,6 +118,7 @@ const T = {
     },
   },
   ko: {
+    relayBusy: "리그의 릴레이가 요청을 거절했어요 (혼잡하거나 중단됨). 잠시 후 다시 시도하세요.",
     opYou: "지금 당신이 오퍼레이터",
     inLine: "대기 #{n} · 약 {t}",
     moveUp: "DEBUG에서 이기면 앞당겨져요",
@@ -220,6 +222,7 @@ const T = {
     },
   },
   ja: {
+    relayBusy: "リグの中継サーバーが拒否しました（混雑か停止中）。少ししてからもう一度どうぞ。",
     opYou: "あなたがオペレーター",
     inLine: "待機 #{n} · あと約{t}",
     moveUp: "DEBUGに勝つと順番が早まります",
@@ -323,6 +326,7 @@ const T = {
     },
   },
   'zh-TW': {
+    relayBusy: "裝備的中繼伺服器拒絕了（忙碌或離線）。請稍後再試。",
     opYou: "輪到你當操作員",
     inLine: "排隊第 {n} 位 · 約 {t}",
     moveUp: "贏得 DEBUG 可以往前排",
@@ -426,6 +430,7 @@ const T = {
     },
   },
   vi: {
+    relayBusy: "Máy chuyển tiếp của bộ đồ từ chối (đang bận hoặc ngừng). Thử lại sau chút nữa.",
     opYou: "BẠN ĐANG ĐIỀU KHIỂN",
     inLine: "XẾP HÀNG #{n} · khoảng {t}",
     moveUp: "thắng DEBUG để lên trước",

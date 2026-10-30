@@ -4,14 +4,22 @@
 //   build command   BASE=/ npm run build
 //   deploy command  npx wrangler deploy
 // The guest relay is its own Worker (worker/relay, relay.steamworkz.net).
+// Two names, one site: deck. is the owner's (behind Cloudflare Access, a login), jack.
+// is for guests (no login); guest links and QRs use jack. (src/guests.js).
 {
   "name": "cyber-deck",
   "compatibility_date": "2026-10-01",
+  "main": "worker/site.js",              // jack. only serves the guest page (see the file)
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": true,
     "not_found_handling": "single-page-application",   // / and unknown paths -> the deck
     "html_handling": "none"                            // guest.html stays guest.html: no redirects
   },
-  "routes": [{ "pattern": "deck.steamworkz.net", "custom_domain": true }],
-  "workers_dev": true
+  "routes": [
+    { "pattern": "deck.steamworkz.net", "custom_domain": true },
+    { "pattern": "jack.steamworkz.net", "custom_domain": true }
+  ],
+  "workers_dev": false                   // no *.workers.dev back door around the login
 }
