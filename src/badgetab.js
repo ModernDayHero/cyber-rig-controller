@@ -1,7 +1,8 @@
 // BADGE tab: the e-ink badge's screens, drawn here at the badge's own 540 x 960
 // (portrait) and sent finished into the badge's slots; the badge only shows them.
 //   LOGIN  slot 0: the guest QR (guests.js link), the callsign and a JACK IN bar
-//   CARD   slot 1: the STEAMWorkz card, two QRs: the GitHub repo and the guest page
+//   CARD   slot 1: the STEAMWorkz card: a LINK QR (your site / socials, SET -> BADGE) and
+//          the guest page's; with no link set, just the guest QR, bigger
 //   PHOTO  a guest portrait (slots 2-5, the badge keeps the last four): any picture,
 //          cropped (drag it / ZOOM), contrast, 16 greys with dithering
 //   SCORES slot 7: HIGH SCORES from DEBUG; refreshed quietly after each win, shown on a
@@ -16,10 +17,9 @@ import { showCode } from './guests.js';
 import { words } from './i18n.js';
 
 const STORE_KEY = 'rig-badge';
-export const REPO_URL = 'https://github.com/ModernDayHero/cyber-rig-controller';
 const DEFAULTS = {
   kind: 'login', callsign: 'MODERNDAYHERO', turn: 'cw', zoom: 1, panX: 0, panY: 0, contrast: 1.2, brightness: 0,
-  dither: true, mode: 0, hold: 180, repo: REPO_URL,
+  dither: true, mode: 0, hold: 180, link: '',
 };
 const KIND_SLOT = { login: SLOT.LOGIN, card: SLOT.CARD, scores: SLOT.SCORES, photo: SLOT.GUEST };
 const mmss = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -28,6 +28,7 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
   const badge = rig.badge;
   let st = { ...DEFAULTS };
   try { st = { ...st, ...JSON.parse(localStorage.getItem(STORE_KEY)) }; } catch {}
+  delete st.repo;                       // the old CODE QR (the repo is private now)
   const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(st)); } catch {} };
   let photo = null, grey = null;
   const work = document.createElement('canvas');
@@ -98,12 +99,16 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
     do g.font = `700 ${px--}px ${font}`; while (g.measureText(st.callsign).width > w - 60 && px > 18);
     g.fillText(st.callsign, w / 2, 168);
 
-    const size = 290;
     g.font = `700 24px ${font}`;
-    g.fillText('BUILD ONE // THE CODE', w / 2, 226);
-    drawQr(st.repo || REPO_URL, w / 2, 250, size);
-    g.fillText('JACK IN // GUESTS', w / 2, 590);
-    drawQr(host.link, w / 2, 614, size);
+    if (st.link) {                        // two QRs: your site / socials, and the way in
+      g.fillText('FOLLOW // STEAMWorkz', w / 2, 226);
+      drawQr(st.link, w / 2, 250, 290);
+      g.fillText('JACK IN // GUESTS', w / 2, 590);
+      drawQr(host.link, w / 2, 614, 290);
+    } else {                              // no link set (SET -> BADGE): just the way in, bigger
+      g.fillText('JACK IN // GUESTS', w / 2, 236);
+      drawQr(host.link, w / 2, 270, 600);
+    }
     g.fillStyle = '#555';
     g.font = `20px ${font}`;
     g.fillText('ask the netrunner for a password', w / 2, 936);
@@ -206,7 +211,7 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
     segShow('badgeMode', 'mode', st.mode);
     $('badgeHold').value = st.hold;
     $('badgeHoldOut').textContent = st.hold >= 60 ? `${Math.round(st.hold / 6) / 10} min` : `${st.hold} s`;
-    $('badgeRepo').value = st.repo;
+    $('badgeLink').value = st.link;
     $('badgeCall').value = st.callsign;
     for (const [id, k, f] of [['badgeZoom', 'zoom', (v) => `${Math.round(v * 100)}%`],
       ['badgeContrast', 'contrast', (v) => `${Math.round(v * 100)}%`], ['badgeBright', 'brightness', (v) => `${v > 0 ? '+' : ''}${v}`]]) {
@@ -219,7 +224,12 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
   segPick('badgeKind', 'kind', (k) => { st.kind = k; save(); show(); });
   segPick('badgeDither', 'dither', (v) => { st.dither = v === '1'; save(); show(); });
   segPick('badgeTurn', 'turn', (v) => { st.turn = v; save(); show(); });
-  $('badgeRepo').addEventListener('change', () => { st.repo = $('badgeRepo').value.trim() || REPO_URL; save(); show(); });
+  $('badgeLink').addEventListener('change', () => {
+    const v = $('badgeLink').value.trim();
+    st.link = !v || /^https?:\/\//i.test(v) ? v : `https://${v}`;   // instagram.com/you works too
+    save();
+    show();
+  });
   const sendMode = () => badge.connected && badge.setMode(st.mode, st.hold).catch((err) => showBanner(`Badge: ${err.message}`));
   segPick('badgeMode', 'mode', (v) => { st.mode = Number(v); save(); show(); sendMode(); });
   $('badgeHold').addEventListener('input', () => { st.hold = Number($('badgeHold').value); save(); show(); });

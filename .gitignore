@@ -5,3 +5,8 @@ dev-dist/
 
 # Cloudflare Worker (worker/relay)
 .wrangler/
+
+# Editor workspaces and Python bytecode stay local
+*.code-workspace
+__pycache__/
+*.pyc

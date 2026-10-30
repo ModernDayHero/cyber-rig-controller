@@ -135,7 +135,7 @@
             <span class="label">CALLSIGN</span>
             <input class="text" id="badgeCall" maxlength="16" />
           </div>
-          <span class="hint">The guest QR opens the guest page (GUESTS). It stays valid until SET → GUESTS → NEW LINK. The card's other QR is the code: SET → BADGE.</span>
+          <span class="hint">The guest QR opens the guest page (GUESTS). It stays valid until SET → GUESTS → NEW LINK. The card's other QR is your link: SET → BADGE → LINK QR.</span>
         </section>
 
         <section class="panel" data-pane="photo" hidden>
@@ -264,8 +264,8 @@
             </div>
             <span class="hint">WORN: a guest portrait stays this long, then the login QR comes back. TABLE: a photo frame, the login QR and the last four portraits take turns, this long each. On the badge, KEY 1 flips login ↔ card, KEY 2 steps through portraits.</span>
             <div class="row">
-              <span class="label">CODE QR</span>
-              <input class="text" id="badgeRepo" type="url" inputmode="url" spellcheck="false" />
+              <span class="label">LINK QR</span>
+              <input class="text" id="badgeLink" type="url" inputmode="url" spellcheck="false" placeholder="your site or instagram.com/you" />
             </div>
           </div>
         </details>

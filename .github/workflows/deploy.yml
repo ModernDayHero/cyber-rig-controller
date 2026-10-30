@@ -16,6 +16,9 @@ concurrency:
 
 jobs:
   build:
+    # GitHub Pages only serves public repos on a free account: once the repo is private
+    # (the site moves to Cloudflare Pages, docs/hosting-cloudflare.md) this stops running.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

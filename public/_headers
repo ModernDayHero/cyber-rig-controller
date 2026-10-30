@@ -1,0 +1,6 @@
+# Cloudflare Pages response headers (docs/hosting-cloudflare.md). GitHub Pages ignores this file.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
+  Permissions-Policy: bluetooth=(self), camera=(self), accelerometer=(self), gyroscope=(self), geolocation=(), microphone=(), payment=()

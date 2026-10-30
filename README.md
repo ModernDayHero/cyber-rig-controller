@@ -1,7 +1,8 @@
 # STEAMWorkz Cyber Deck
 
 The phone deck that runs the STEAMWorkz cyber rig. A Web Bluetooth PWA for Chrome on
-Android, hosted on GitHub Pages (the repo and URL keep the old `cyber-rig-controller` name).
+Android. The site moves to Cloudflare Pages and this repo goes private
+(docs/hosting-cloudflare.md); until then it's on GitHub Pages.
 
 ```
 Phone ──BLE──▶ CLUE (watch) ──BLE──▶ Rebreather mask, left + right (Circuit Playground Bluefruit ×2)
@@ -38,10 +39,13 @@ npm run dev        # http://localhost:5173/cyber-rig-controller/
 
 ## Deploy
 
-Pushing to `main` runs `.github/workflows/deploy.yml`, which builds and publishes to
-GitHub Pages at `https://<user>.github.io/cyber-rig-controller/` (Settings → Pages →
-Source: GitHub Actions). For a custom domain at the root, build with `BASE=/` and
-add `public/CNAME`.
+- **Cloudflare Pages** (the target): builds `main` with `BASE=/` into `dist/`, and
+  `public/_headers` sets the security headers. Setup and moving over:
+  `docs/hosting-cloudflare.md`.
+- **GitHub Pages** (until the repo is private): pushing to `main` runs
+  `.github/workflows/deploy.yml` → `https://<user>.github.io/cyber-rig-controller/`.
+  It skips itself once the repo is private.
+- **Guest relay**: a Cloudflare Worker in `worker/relay`, `docs/relay-worker.md`.
 
 ## On the phone
 
