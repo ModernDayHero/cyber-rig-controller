@@ -562,6 +562,7 @@ function openInvite() {
   $('inviteOpen').href = host.link;           // this phone / PC: a guest tab, for testing
   tickInvite();
   if (!$('invite').open) $('invite').showModal();
+  badgeTab?.sendInvite(shownInvite);          // and on the badge, if it's linked
 }
 function tickInvite() {
   if (!shownInvite || !$('invite').open) return;
@@ -628,7 +629,7 @@ function renderGuests() {
   }
   for (const [g, x] of host.guests) {
     const tag = LANGS.find((l) => l.code === x.lang)?.label || 'EN';
-    const r = gItem('', `${x.name} · ${tag}`, left(x.until),
+    const r = gItem(x.full ? 'full' : '', `${x.name} · ${tag}${x.full ? ' · FULL' : ''}`, left(x.until),
       ['DISCONNECT', 'ghost', () => host.kick(g)],
       ['PWN', 'pwn', () => host.pwn(g, callsign())]);
     r.dataset.until = x.until;
@@ -642,6 +643,12 @@ function renderGuests() {
     if (q.kind === 'up') r.prepend(picCanvas(q.pic));
     rows.push(r);
   }
+  if (host.board.length) {
+    const top = document.createElement('div');
+    top.className = 'gboard';
+    top.textContent = 'TOP DEBUGGERS  ' + host.board.slice(0, 3).map((b, i) => `${i + 1}. ${b.name} ${mmss(b.ms)}`).join('   ');
+    rows.push(top);
+  }
   $('guestList').replaceChildren(...rows);
   tickInvite();
 }
@@ -651,7 +658,7 @@ host.addEventListener('tick', () => {        // just the countdowns, so buttons 
   tickInvite();
 });
 renderGuests();
-setupBadge({ rig, host, $, segPick, segShow, showBanner });
+const badgeTab = setupBadge({ rig, host, $, segPick, segShow, showBanner });
 
 // ---------- power ----------
 const asleep = (p) => p === POWER.STANDBY || p === POWER.OFF;

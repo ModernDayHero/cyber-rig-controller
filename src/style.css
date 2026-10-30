@@ -133,7 +133,7 @@ body.hacked .current { animation: glitch 0.5s steps(2) infinite; }
   font-size: 15px; color: var(--dim); background: var(--bg, #000); border: 1px solid var(--line);
 }
 .pic-pix { width: 112px; height: 112px; }
-.badge-actions { flex: none; }
+.seg.badge-actions { flex: none; }
 .badge-pix { width: min(270px, 62vw); height: auto; aspect-ratio: 9 / 16; align-self: center; touch-action: none; background: #fff; border-radius: 4px; }
 .seg > button:disabled { opacity: 0.4; }
 .ghost.go { flex: none; padding: 12px 16px; border-radius: 6px; font-weight: 700; letter-spacing: 0.06em; }
@@ -311,6 +311,8 @@ output { width: 44px; text-align: right; font-size: 13px; }
 .gitem canvas { width: 40px; height: 40px; image-rendering: pixelated; background: #000; border: 1px solid var(--line); flex: none; }
 .gitem button { flex: none; padding: 8px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; }
 .gitem .yes { background: var(--ok); border: 0; color: #000; }
+.gitem.full .who { color: var(--ok); }
+.gboard { font-size: 11px; letter-spacing: 0.08em; color: var(--dim); padding-top: 4px; border-top: 1px solid var(--line); }
 .gitem .pwn { background: var(--bad); border: 0; color: #000; }
 .gitem.pending .who { color: #00e5ff; font-weight: 700; letter-spacing: 0.1em; }
 .invite-head { margin: 0; text-align: center; font-weight: 700; letter-spacing: 0.2em; color: #00e5ff; }
@@ -439,4 +441,18 @@ body.glitching .mode, body.glitching .pics button { transform: skewX(-12deg); }
 .pwn-sub { margin: -6px 0 0; text-align: center; font-size: 22px; font-weight: 700; color: #ff2bd6; text-shadow: 0 0 12px #ff2bd6; }
 .pwn-sub:empty { display: none; }
 .pwn-by { margin: 0; text-align: center; letter-spacing: 0.2em; color: var(--dim); }
+/* guest page: DEBUG + what's locked until they win it */
+.gdebug { border: 1px solid #ff2dca; border-radius: 6px; padding: 12px; background: color-mix(in srgb, #ff2dca 8%, var(--panel)); }
+.gdebug .gbig { margin: 0; font-size: 18px; color: #ff2dca; text-shadow: 0 0 10px #ff2dca; }
+.gaccess { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; border: 1px solid var(--line); color: var(--dim); }
+body.full .gaccess { color: #000; background: var(--ok); border-color: var(--ok); }
+body:not(.full) .needs-full { position: relative; opacity: 0.35; pointer-events: none; filter: grayscale(0.7); }
+body:not(.full) .needs-full::after {
+  content: attr(data-lock); position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #fff; text-shadow: 0 0 6px #000;
+}
+.game { position: fixed; inset: 0; z-index: 50; background: #06061a; }
+.game[hidden] { display: none; }
+.game iframe { width: 100%; height: 100%; border: 0; display: block; }
+.game .close { position: absolute; top: max(10px, env(safe-area-inset-top)); right: 10px; z-index: 2; padding: 8px 12px; border-radius: 6px; }
 body.cooling #gPlay .mode, body.cooling #gPlay .pics button, body.cooling #gHack { opacity: 0.5; pointer-events: none; }

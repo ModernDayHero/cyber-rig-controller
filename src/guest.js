@@ -38,8 +38,14 @@ function applyLang() {
   for (const el of document.querySelectorAll('[data-i18n-ph]')) el.placeholder = t[el.dataset.i18nPh];
   for (const b of $('gLang').children) b.classList.toggle('on', b.dataset.lang === me.lang);
   $('gState').textContent = t[stateKey] ?? stateKey;
+  for (const el of document.querySelectorAll('.needs-full')) el.dataset.lock = t.lockedHint;
   renderNews();
+  renderAccess();
   buildModes();
+}
+function renderAccess() {
+  document.body.classList.toggle('full', !!me.full);
+  $('gAccess').textContent = me.full ? t.accessFull : t.accessGuest;
 }
 $('gLang').append(...LANGS.map(({ code, label }) => {
   const b = document.createElement('button');
@@ -93,9 +99,18 @@ let news = { fw: false, hacked: false };
 function onAnswer(m) {
   switch (m.t) {
     case 'ok':
-      Object.assign(me, { k: m.k, until: m.until });
+      Object.assign(me, { k: m.k, until: m.until, full: !!m.full });
       saveMe();
       play();
+      break;
+    case 'full':
+      me.full = true;
+      saveMe();
+      renderAccess();
+      note(t.fullGranted, 6000);
+      break;
+    case 'breach':
+      note(t.breachYou, 6000);
       break;
     case 'nope':
       screen('gJoin', 'stOffline');
@@ -107,10 +122,10 @@ function onAnswer(m) {
       end(m.why);
       break;
     case 'pwn':
-      pwned(m.by);
+      pwned(m.by, m.stay);
       break;
     case 'deny':
-      note({ firewall: t.denyFirewall, hacked: t.denyHacked, busy: t.denyBusy }[m.why] || t.denied2);
+      note({ firewall: t.denyFirewall, hacked: t.denyHacked, busy: t.denyBusy, locked: t.lockedHint }[m.why] || t.denied2);
       break;
     case 'res':
       if (m.why === 'script') note(t.script, 6000);
@@ -183,10 +198,14 @@ $('gLeave').addEventListener('click', () => { post({ t: 'bye' }); end('left'); }
 // About 7 s of this page falling apart: the controls glitch, a fake "exfiltration" log
 // scrolls, I PWNED YOU, then the reveal (end('pwned')): only this page. All in the
 // guest's language.
-function pwned(by) {
-  me.k = null;
-  saveMe();
-  clearInterval(end.t);
+// stay: a lost DEBUG game, not a kick: after the reveal they're back where they were.
+function pwned(by, stay = false) {
+  closeGame();
+  if (!stay) {
+    me.k = null;
+    saveMe();
+    clearInterval(end.t);
+  }
   document.body.classList.add('glitching');
   try { navigator.vibrate?.([80, 60, 80, 60, 300]); } catch {}
   setTimeout(() => {
@@ -197,9 +216,32 @@ function pwned(by) {
   }, 1600);
   setTimeout(() => {
     document.body.classList.remove('glitching');
-    end('pwned');
+    if (!stay) return end('pwned');
+    screen('gPlay', 'stIn');
+    note(`${t.end.pwned[1]} ${t.tryAgain}`, 9000);   // the reveal, always in their language
   }, 8000);
 }
+
+// ---------- DEBUG: Byte vs BUG.EXE ----------
+function closeGame() {
+  $('gGame').hidden = true;
+  $('gGameFrame').src = 'about:blank';
+}
+$('gPlayGame').addEventListener('click', () => {
+  if (!me.k) return;
+  $('gGameFrame').src = 'viz/byte-vs-bug.html?embed';
+  $('gGame').hidden = false;
+});
+$('gGameClose').addEventListener('click', closeGame);
+window.addEventListener('message', (e) => {
+  if (e.origin !== location.origin || e.data?.type !== 'bvb-end' || !me.k) return;
+  const { win, ms, saved } = e.data;
+  post({ t: 'game', won: !!win, ms, saved });
+  setTimeout(() => {                    // let them see the game's own ending first
+    closeGame();
+    note(t.gameSent);
+  }, 3500);
+});
 
 function renderNews() {
   $('gHack').disabled = news.fw;

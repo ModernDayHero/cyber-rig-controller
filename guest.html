@@ -41,14 +41,23 @@
         <div class="row">
           <span class="label" data-i18n="access"></span>
           <span class="gtime" id="gTime">0:00</span>
+          <span class="gaccess" id="gAccess"></span>
           <button class="ghost go" id="gLeave" data-i18n="leave"></button>
         </div>
         <p class="banner" id="gNote" hidden></p>
 
-        <nav class="tabs" id="gTabs" aria-label="Mode set"></nav>
-        <section class="modes" id="gModes" aria-label="Modes"></section>
+        <section class="panel gdebug" aria-label="DEBUG">
+          <p class="gbig">DEBUG // BYTE vs BUG.EXE</p>
+          <span class="hint" data-i18n="debugHint"></span>
+          <button class="connect" id="gPlayGame" data-i18n="play"></button>
+        </section>
 
-        <section class="panel" aria-label="The virus">
+        <div class="needs-full panel">
+          <nav class="tabs" id="gTabs" aria-label="Mode set"></nav>
+          <section class="modes" id="gModes" aria-label="Modes"></section>
+        </div>
+
+        <section class="panel needs-full" aria-label="The virus">
           <button class="ghost send danger" id="gHack"></button>
           <span class="hint" id="gHackHint"></span>
         </section>
@@ -66,7 +75,7 @@
           <div class="pics" id="gPics"></div>
         </section>
 
-        <section class="panel" aria-label="Send your own picture">
+        <section class="panel needs-full" aria-label="Send your own picture">
           <span class="label" data-i18n="yourPic"></span>
           <div class="imgrow">
             <canvas class="pix pic-pix" id="gUpPreview" width="16" height="16"></canvas>
@@ -81,6 +90,12 @@
           </div>
           <button class="ghost send" id="gUpSend" data-i18n="sendPic" disabled></button>
         </section>
+      </div>
+
+      <!-- DEBUG: Byte vs BUG.EXE (public/viz) full screen; it posts its result back -->
+      <div class="game" id="gGame" hidden>
+        <iframe id="gGameFrame" title="Byte vs BUG.EXE" allow="autoplay"></iframe>
+        <button class="ghost close" id="gGameClose" data-i18n="close"></button>
       </div>
 
       <!-- PWNED: our own page plays dead for a few seconds, then owns up -->

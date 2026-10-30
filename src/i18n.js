@@ -14,6 +14,16 @@ export const LANGS = [
 
 const T = {
   en: {
+    debugHint: "Beat BUG.EXE for FULL ACCESS to the rig. Lose, and it escapes… into the rig, or into you.",
+    play: "PLAY",
+    accessGuest: "GUEST",
+    accessFull: "FULL ACCESS",
+    lockedHint: "Locked: win DEBUG for full access.",
+    fullGranted: "FULL ACCESS GRANTED. The rig is yours, choom.",
+    breachYou: "BUG.EXE escaped into the rig! You just hacked it.",
+    tryAgain: "Play DEBUG again for full access.",
+    gameSent: "Result sent to the rig…",
+    close: "CLOSE",
     pwnSub: "",
     pwnBy: "by {x}",
     pwnLog: [
@@ -94,6 +104,16 @@ const T = {
     },
   },
   ko: {
+    debugHint: "BUG.EXE를 이기면 리그 전체 권한! 지면 BUG.EXE가 탈출해요… 리그로, 아니면 당신에게로.",
+    play: "플레이",
+    accessGuest: "게스트",
+    accessFull: "전체 권한",
+    lockedHint: "잠김: DEBUG에서 이기면 전체 권한이 열려요.",
+    fullGranted: "전체 권한 승인. 이제 리그는 네 거야, 친구.",
+    breachYou: "BUG.EXE가 리그로 탈출했어요! 방금 리그를 해킹했어요.",
+    tryAgain: "DEBUG를 다시 플레이해서 전체 권한을 얻으세요.",
+    gameSent: "결과를 리그로 전송 중…",
+    close: "닫기",
     pwnSub: "해킹 당했지롱!",
     pwnBy: "해커: {x}",
     pwnLog: [
@@ -174,6 +194,16 @@ const T = {
     },
   },
   ja: {
+    debugHint: "BUG.EXEに勝てばリグのフルアクセス。負けるとBUG.EXEが逃げ出す…リグへ、それともあなたへ。",
+    play: "プレイ",
+    accessGuest: "ゲスト",
+    accessFull: "フルアクセス",
+    lockedHint: "ロック中：DEBUGに勝つとフルアクセス。",
+    fullGranted: "フルアクセス承認。リグは君のものだ、チューム。",
+    breachYou: "BUG.EXEがリグに逃げ込んだ！リグをハックしちゃった。",
+    tryAgain: "もう一度DEBUGをプレイしてフルアクセスを狙おう。",
+    gameSent: "結果をリグに送信中…",
+    close: "閉じる",
     pwnSub: "ハックされちゃったね！",
     pwnBy: "ハッカー：{x}",
     pwnLog: [
@@ -254,6 +284,16 @@ const T = {
     },
   },
   'zh-TW': {
+    debugHint: "打敗 BUG.EXE 就能取得裝備的完整權限。輸了，它就會逃出來……逃進裝備，或逃到你身上。",
+    play: "開始",
+    accessGuest: "訪客",
+    accessFull: "完整權限",
+    lockedHint: "已鎖定：贏得 DEBUG 才能取得完整權限。",
+    fullGranted: "完整權限已開通。裝備歸你了，兄弟。",
+    breachYou: "BUG.EXE 逃進裝備了！你剛剛駭進了裝備。",
+    tryAgain: "再玩一次 DEBUG 來爭取完整權限。",
+    gameSent: "正在把結果傳給裝備…",
+    close: "關閉",
     pwnSub: "你被我駭了！",
     pwnBy: "駭客：{x}",
     pwnLog: [
@@ -334,6 +374,16 @@ const T = {
     },
   },
   vi: {
+    debugHint: "Thắng BUG.EXE để có TOÀN QUYỀN với bộ đồ. Thua thì nó trốn thoát… vào bộ đồ, hoặc vào bạn.",
+    play: "CHƠI",
+    accessGuest: "KHÁCH",
+    accessFull: "TOÀN QUYỀN",
+    lockedHint: "Đã khóa: thắng DEBUG để có toàn quyền.",
+    fullGranted: "ĐÃ CẤP TOÀN QUYỀN. Bộ đồ là của bạn đó.",
+    breachYou: "BUG.EXE đã trốn vào bộ đồ! Bạn vừa hack nó.",
+    tryAgain: "Chơi DEBUG lại để có toàn quyền.",
+    gameSent: "Đang gửi kết quả tới bộ đồ…",
+    close: "ĐÓNG",
     pwnSub: "Bạn đã bị hack!",
     pwnBy: "bởi {x}",
     pwnLog: [

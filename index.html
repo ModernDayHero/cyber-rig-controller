@@ -119,20 +119,21 @@
       <div class="view" id="view-badge" hidden>
         <div class="row">
           <span class="label">SHOW</span>
-          <div class="seg" id="badgeKind">
+          <div class="seg seg3" id="badgeKind">
             <button data-kind="login">LOGIN QR</button>
-            <button data-kind="photo">PHOTO</button>
+            <button data-kind="card">CARD</button>
+            <button data-kind="photo">PORTRAIT</button>
           </div>
         </div>
 
         <canvas class="pix badge-pix" id="badgePreview" width="540" height="960" aria-label="Badge preview"></canvas>
 
-        <section class="panel" data-pane="login">
+        <section class="panel" data-pane="login card">
           <div class="row">
             <span class="label">CALLSIGN</span>
             <input class="text" id="badgeCall" maxlength="16" />
           </div>
-          <span class="hint">The QR opens the guest page (GUESTS). It stays valid until SET → GUESTS → NEW LINK.</span>
+          <span class="hint">The guest QR opens the guest page (GUESTS). It stays valid until SET → GUESTS → NEW LINK. The card's other QR is the code: SET → BADGE.</span>
         </section>
 
         <section class="panel" data-pane="photo" hidden>
@@ -175,6 +176,10 @@
         <span class="hint" id="badgeInfo">Not linked: tap the Badge chip at the top.</span>
         <div class="seg badge-actions">
           <button class="send" id="badgeSend">SEND TO BADGE<span class="bar" id="badgeBar"></span></button>
+        </div>
+        <div class="seg seg3 badge-actions">
+          <button id="badgeShowLogin">SHOW LOGIN</button>
+          <button id="badgeShowCard">SHOW CARD</button>
           <button id="badgeClear">CLEAR</button>
         </div>
       </div>
@@ -215,6 +220,28 @@
               <input class="text" id="guestRelay" type="url" inputmode="url" spellcheck="false" placeholder="https://ntfy.sh" />
             </div>
             <span class="hint">GUESTS (top of the screen) opens the port; each guest gets this long from typing their password. The link stays the same (the badge's QR too) until NEW LINK, which also kicks everyone. RELAY: any ntfy server, e.g. your own on the NAS.</span>
+          </div>
+        </details>
+        <details class="fold" data-fold="badge">
+          <summary>BADGE</summary>
+          <div class="fold-body">
+            <div class="row">
+              <span class="label">MODE</span>
+              <div class="seg" id="badgeMode">
+                <button data-mode="0">WORN</button>
+                <button data-mode="1">TABLE</button>
+              </div>
+            </div>
+            <div class="row">
+              <span class="label">HOLD</span>
+              <input type="range" id="badgeHold" min="30" max="600" step="30" />
+              <output id="badgeHoldOut">3 min</output>
+            </div>
+            <span class="hint">WORN: a guest portrait stays this long, then the login QR comes back. TABLE: a photo frame, the login QR and the last four portraits take turns, this long each. On the badge, KEY 1 flips login ↔ card, KEY 2 steps through portraits.</span>
+            <div class="row">
+              <span class="label">CODE QR</span>
+              <input class="text" id="badgeRepo" type="url" inputmode="url" spellcheck="false" />
+            </div>
           </div>
         </details>
         <details class="fold" data-fold="sound">

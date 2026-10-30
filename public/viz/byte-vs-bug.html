@@ -21,6 +21,10 @@
   color-scheme:dark;
 }
 html,body{background:var(--abyss);color:var(--ink)}
+/* Embedded in the rig's guest page: only the arcade, filling the screen */
+.embed header,.embed .guide{display:none!important}
+.embed .wrap{max-width:none;padding:0;margin:0}
+.embed .stage{height:100vh;height:100dvh;aspect-ratio:auto;border-radius:0;margin:0;box-shadow:none}
 body{font-family:var(--body);font-size:16px;line-height:1.55}
 .wrap{max-width:1100px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 56px;display:grid;gap:32px}
 
@@ -148,6 +152,9 @@ code{font-family:var(--display);font-size:.88em;background:var(--abyss);padding:
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
+const EMBED=new URLSearchParams(location.search).has('embed');
+if(EMBED)document.documentElement.classList.add('embed');
+
 (function(){
 const COLORS=[
   {n:'RED',r:255,g:50,b:50},
@@ -394,6 +401,8 @@ function fmt(t){const s=Math.floor(t);return Math.floor(s/60)+':'+String(s%60).p
 function end(win){
   state=win?'win':'lose';
   const saved=octos.filter(o=>o.alive).length;
+  // Inside the rig's guest page (?embed): the result goes to the page, which tells the rig.
+  if(EMBED)parent.postMessage({type:'bvb-end',win,ms:Math.round(elapsed*1000),saved},location.origin);
   document.getElementById('endTitle').textContent=win?'Bug fixed!':'BUG.EXE ate every Octlet';
   document.getElementById('endText').textContent=win
     ?`You debugged it in ${fmt(elapsed)}. ${saved} of 6 Octlets stayed safe${saved<6?`, and the bug let the other ${6-saved} go`:''}.`

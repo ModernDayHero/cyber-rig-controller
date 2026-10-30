@@ -2,9 +2,13 @@
 // shows the guest QR); they scan, type a handle + the password and they're in, already
 // approved, for `minutes`. Each password lets in exactly one phone; that's their
 // "certificate" until it runs out, DISCONNECT, or PWN (their screen gets glitched by our
-// own page, then a reveal: their phone is fine). Once in:
-//   mode / pic / hack -> straight to the rig (FIREWALL still applies)
-//   say / up (a typed word, an uploaded picture) -> SHOW / BLOCK each one here
+// own page, then a reveal: their phone is fine). Once in, a guest has GUEST access:
+//   pic (library pictures) -> straight to the rig;  say (a typed word) -> SHOW / BLOCK here
+//   game: DEBUG (Byte vs BUG.EXE, public/viz) - the result decides the rest:
+//     win  -> FULL ACCESS: mode / hack (FIREWALL still applies) and up (an uploaded picture,
+//             SHOW / BLOCK here); the rig shows BUG FIXED + their time; a hacked rig is purged
+//     lose -> BUG.EXE escapes: into the rig (the virus, at most once a minute, never through
+//             the FIREWALL) or back at them (a PWN that doesn't kick them; they can play again)
 //
 // The link is ntfy.sh (no server of our own): guests post to the session topic, this app
 // listens to it (EventSource) and answers each guest on <topic>-<guest id>; rig news for
@@ -27,6 +31,9 @@ const QUEUE_MAX = 12;                // waiting words / pictures; more are turne
 const INVITE_MS = 15 * 60000;        // an unused password expires
 const MISSES = 5;                    // wrong passwords in a row before logins pause...
 const PAUSE_MS = 60000;              // ...for this long
+const GAME_GAP = 15000;              // one DEBUG result a guest this often
+const BREACH_GAP = 60000;            // a lost game lets the virus loose at most this often
+const BOARD_SIZE = 10;
 // No 0/O, 1/I/L, 2/Z, 5/S, 8/B: easy to read off a screen and type.
 const CODE_CHARS = 'ACDEFGHJKMNPQRTUVWXY34679';
 const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), (v) => CODE_CHARS[v % CODE_CHARS.length]).join('');
@@ -38,6 +45,9 @@ const clean = (v, n) => ascii(v).toUpperCase().replace(/\s+/g, ' ').trim().slice
 // A handle as they typed it, any script (only shown on this phone): no control characters.
 const handle = (v) => [...String(v ?? '').replace(/[\p{C}]/gu, '').replace(/\s+/g, ' ').trim()].slice(0, 12).join('');
 const LANG_CODES = ['en', 'ko', 'ja', 'zh-TW', 'vi'];
+const mmss = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+// The owner's callsign (BADGE tab), for PWN signatures.
+const signature = () => { try { return JSON.parse(localStorage.getItem('rig-badge'))?.callsign || 'THE RIG'; } catch { return 'THE RIG'; } };
 const isId = (g) => typeof g === 'string' && /^[a-z0-9]{16}$/.test(g);
 
 /** A guest's uploaded picture, checked: 16 rows of 16 from '.' + its palette letters. */
@@ -69,6 +79,8 @@ export class GuestHost extends EventTarget {
     this._n = 0;
     this._misses = 0;
     this._pausedUntil = 0;
+    this._breachAt = 0;
+    this.board = saved.board || [];  // fastest DEBUG wins: { name, ms, saved }
     if (saved.open) this.enable();
 
     // Firewall / virus news for every guest (their HACK IT ALL button follows it).
@@ -81,14 +93,18 @@ export class GuestHost extends EventTarget {
   /** The guest page's address for this session (made on first use, kept after). */
   get link() {
     if (!this.topic) { this.topic = 'cd' + rand(20); this._save(); }
-    const here = location.href.split('#')[0].split('?')[0].replace(/[^/]*$/, '');
+    let here = location.href.split('#')[0].split('?')[0].replace(/[^/]*$/, '');
+    // Dev on localhost: guests' phones can't reach "localhost", so use the PC's Wi-Fi address.
+    if (import.meta.env?.DEV && typeof __LAN_HOST__ === 'string' && __LAN_HOST__ && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
+      here = here.replace(location.hostname, __LAN_HOST__);
+    }
     const via = this.relay === DEFAULT_RELAY ? '' : '@' + new URL(this.relay).host;
     return `${here}guest.html#${this.topic}${via}`;
   }
 
   _save() {
-    const { topic, relay, open, minutes, invites } = this;
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ topic, relay, open, minutes, invites, guests: [...this.guests] })); } catch {}
+    const { topic, relay, open, minutes, invites, board } = this;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ topic, relay, open, minutes, invites, board, guests: [...this.guests] })); } catch {}
   }
   _changed() {
     this._save();
@@ -187,10 +203,12 @@ export class GuestHost extends EventTarget {
     if (m.t === 'join') return this._join(m.g, x, m);
     if (!x || m.k !== x.token) return;          // not let in (or not them): ignored
     if (m.t === 'bye') return this.kick(m.g, 'left');
+    if (m.t === 'game') return this._game(m.g, x, m);
     const now = Date.now();
     if (now < x.last + GAP_MS) return;
     x.last = now;
     const deny = (why) => this._to(m.g, { t: 'deny', why });
+    if (['mode', 'hack', 'up'].includes(m.t) && !x.full) return deny('locked');   // win DEBUG first
     switch (m.t) {
       case 'mode': {
         const set = SETS[m.set], i = m.i | 0;
@@ -225,7 +243,7 @@ export class GuestHost extends EventTarget {
 
   _join(g, x, m) {
     if (x) {                                     // their page reloaded: same phone, same token
-      if (m.k === x.token) this._to(g, { t: 'ok', k: x.token, until: x.until, name: x.name });
+      if (m.k === x.token) this._to(g, { t: 'ok', k: x.token, until: x.until, name: x.name, full: !!x.full });
       return;
     }
     const now = Date.now();
@@ -241,12 +259,35 @@ export class GuestHost extends EventTarget {
     const guest = {
       name: handle(m.name) || 'GUEST',
       lang: LANG_CODES.includes(m.lang) ? m.lang : 'en',
-      code, until: now + this.minutes * 60000, token: rand(16), last: 0,
+      code, until: now + this.minutes * 60000, token: rand(16), last: 0, full: false, lastGame: 0,
     };
     this.guests.set(g, guest);
     this._to(g, { t: 'ok', k: guest.token, until: guest.until, name: guest.name });
     this._news = '';
     this._sendNews();                            // so they know the firewall state
+    this._buzz();
+    this._changed();
+  }
+
+  /** A DEBUG result (on trust: it's a party). */
+  _game(g, x, m) {
+    const now = Date.now(), ms = m.ms | 0, saved = Math.max(0, Math.min(6, m.saved | 0));
+    if (now < x.lastGame + GAME_GAP || ms < 3000 || ms > 30 * 60000) return;
+    x.lastGame = now;
+    const tag = clean(x.name, 12) || 'RUNNER';
+    if (m.won) {
+      x.full = true;
+      this._to(g, { t: 'full' });
+      this.board = [...this.board, { name: x.name, ms, saved }].sort((a, b) => a.ms - b.ms).slice(0, BOARD_SIZE);
+      if (this.rig.locked) this.rig.purge();     // debugging the rig fixes the rig
+      this.rig.sayText(`BUG FIXED ${tag} ${mmss(ms)}`);
+    } else if (!this.rig.state.sandbox && !this.rig.locked && now > this._breachAt + BREACH_GAP && Math.random() < 0.5) {
+      this._breachAt = now;                      // BUG.EXE escapes into the rig
+      this.rig.hack();
+      this._to(g, { t: 'breach' });
+    } else {
+      this._to(g, { t: 'pwn', by: clean(signature(), 16) || 'THE RIG', stay: true });   // ...or into them
+    }
     this._buzz();
     this._changed();
   }
@@ -289,7 +330,7 @@ export class GuestHost extends EventTarget {
   }
 
   /** PWN: their (our) page glitches out, "I PWNED YOU", the reveal, then they're out. */
-  pwn(g, by) {
+  pwn(g, by = signature()) {
     if (!this.guests.has(g)) return;
     this._to(g, { t: 'pwn', by: clean(by, 16) || 'THE RIG' });
     this.kick(g, 'left');                        // 'left': the pwn is their goodbye
