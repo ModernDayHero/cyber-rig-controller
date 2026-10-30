@@ -12,9 +12,12 @@ const lanHost = process.env.LAN_HOST || Object.entries(networkInterfaces())
 
 // Served as a GitHub Pages project site: https://<user>.github.io/cyber-rig-controller/
 // For a custom domain at the root later, build with BASE=/ and add public/CNAME.
-const base = process.env.BASE || '/cyber-rig-controller/';
+// `vite build --mode cloudflare` (npm run deploy) builds for the root of deck.steamworkz.net.
+const pick = (mode) => process.env.BASE || (mode === 'cloudflare' ? '/' : '/cyber-rig-controller/');
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const base = pick(mode);
+  return {
   base,
   define: { __LAN_HOST__: JSON.stringify(lanHost) },
   // Two pages: the deck itself, and guest.html, which friends open from the invite QR.
@@ -50,4 +53,5 @@ export default defineConfig({
       },
     }),
   ],
+};
 });

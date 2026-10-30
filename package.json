@@ -5,11 +5,14 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
-    "preview": "vite preview --host"
+    "preview": "vite preview --host",
+    "build:cf": "vite build --mode cloudflare",
+    "deploy": "npm run build:cf && wrangler deploy --config wrangler.jsonc && wrangler deploy --config worker/relay/wrangler.toml"
   },
   "devDependencies": {
     "vite": "^8.3.4",
-    "vite-plugin-pwa": "^2.0.0"
+    "vite-plugin-pwa": "^2.0.0",
+    "wrangler": "^4.156.0"
   },
   "private": true,
   "type": "module",

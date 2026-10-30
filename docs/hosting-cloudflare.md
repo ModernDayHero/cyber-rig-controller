@@ -1,4 +1,25 @@
-# Private repo, site on Cloudflare Pages
+# Private repo, site on Cloudflare
+
+## Current setup (live since 2026-10-30)
+
+| Address | What | Cloudflare Worker |
+|---|---|---|
+| `https://deck.steamworkz.net` | the Cyber Deck + guest page + viz (static files, `public/_headers`) | `cyber-deck` (`wrangler.jsonc`) |
+| `https://relay.steamworkz.net` | the guest relay | `cyber-rig-relay` (`worker/relay`) |
+
+**Deploying an update** (both, from this repo, after `npx wrangler login` once on that PC):
+
+```sh
+npm run deploy      # builds for the domain root, then deploys the site and the relay
+```
+
+The sections below were the original plan (Cloudflare *Pages* via its Git integration).
+The site went up as a plain Worker deployed from the PC instead, which is simpler; step 3
+(make the repo private) and step 4 still apply. If you started a Pages / Git project in
+the dashboard while trying, it can be deleted (Workers & Pages → that project → Settings
+→ Delete).
+
+---
 
 Goal: the **code is private** (GitHub), the **site stays public** (Cloudflare Pages), and
 everything that serves guests lives on your Cloudflare account: the site and the guest
