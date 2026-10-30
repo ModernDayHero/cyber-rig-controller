@@ -3,6 +3,11 @@ name = "cyber-rig-relay"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
 
+# Served at relay.steamworkz.net (the zone is on this Cloudflare account); deploy creates
+# the DNS record and certificate. The workers.dev address keeps working too.
+routes = [{ pattern = "relay.steamworkz.net", custom_domain = true }]
+workers_dev = true
+
 # One Durable Object per guest session: every topic of a session meets in it.
 [[durable_objects.bindings]]
 name = "SESSIONS"
