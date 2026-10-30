@@ -22,7 +22,6 @@ export const SETS = {
       { key: 'A', name: 'VU',         color: '#FFC800', hint: 'mic level meter' },
       { key: 'R', name: 'Rainbow',    color: '#00E5FF', rainbow: true, hint: 'slow wave' },
       { key: 'B', name: 'Rebreather', color: '#00E5FF', breathe: true, hint: 'breathes two colors' },
-      { key: 'H', name: 'Hack',       color: '#FF1E1E', alt: '#FF2BD6', hint: 'release the virus' },
       // Clock face on the CLUE; the mask / hat / BOLT run Dark (lookAs) meanwhile.
       { key: 'W', name: 'Watch',      color: '#39B6C0', hint: 'Octlet clock', lookAs: 'D' },
       { key: 'P', name: 'Sign off',   color: '#E6E6FF', hint: 'flare, then fade out' },
@@ -33,7 +32,6 @@ export const SETS = {
 };
 export const BREATHE_IDX = 2; // Rebreather's slot in the ALT set
 export const RAINBOW_IDX = 1; // Rainbow's slot in the ALT set
-export const HACK_IDX = 3;    // Hack's slot in the ALT set
 
 // How often the virus hijacks the rig on its own (seconds, random in the range).
 // The CLUE runs the timer; max 0 = off.
@@ -132,6 +130,9 @@ export const cmd = {
   // Incoming call ('c') / message ('m'); text = caller or message, shown on the CLUE.
   alert: (kind, text = '') => `N ${kind}${text ? ' ' + text : ''}`,
   mute: (on) => `Q ${on ? 1 : 0}`,
+  sandbox: (on) => `X ${on ? 1 : 0}`,
+  // A mask animation (recipes.js) for mode `key`, as hex; the CLUE passes it to both sides.
+  recipe: (key, bytes) => `L ${key} ${bytes.map((v) => v.toString(16).padStart(2, '0')).join('')}`,
   query: () => '?',
   // A picture for the CLUE (library.js indexed()): palette (J, 8 colours a line, index 0
   // the background), then the 16 rows (I, a hex digit per pixel). Then show() shows it.

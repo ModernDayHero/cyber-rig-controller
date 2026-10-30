@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+    <title>Jack In</title>
+    <link rel="icon" type="image/svg+xml" href="octlet.svg" />
+  </head>
+  <body>
+    <main class="rig guest" id="app">
+      <header class="top">
+        <div class="brand">
+          <img class="brand-mark" src="octlet.svg" alt="" />
+          <span class="brand-name">STEAMWorkz//<wbr />GUEST&nbsp;PORT</span>
+        </div>
+        <span class="current" id="gState">OFFLINE</span>
+      </header>
+
+      <!-- knocking -->
+      <section class="panel" id="gJoin" aria-label="Jack in">
+        <div class="seg seg5 glang" id="gLang" aria-label="Language"></div>
+        <p class="hint" data-i18n="intro"></p>
+        <input class="text" id="gName" maxlength="12" data-i18n-ph="handle" autocomplete="nickname" enterkeyhint="next" />
+        <input class="text code" id="gPass" maxlength="7" data-i18n-ph="password" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" />
+        <label class="consent">
+          <input type="checkbox" id="gConsent" />
+          <span data-i18n="consent"></span>
+        </label>
+        <p class="hint" id="gJoinNote" hidden></p>
+        <button class="connect" id="gJoinBtn" data-i18n="jackIn" disabled></button>
+      </section>
+
+      <section class="panel" id="gWait" hidden aria-live="polite">
+        <p class="gbig" data-i18n="handshake"></p>
+        <p class="hint" id="gWaitHint"></p>
+      </section>
+
+      <!-- in -->
+      <div class="view" id="gPlay" hidden>
+        <div class="row">
+          <span class="label" data-i18n="access"></span>
+          <span class="gtime" id="gTime">0:00</span>
+          <button class="ghost go" id="gLeave" data-i18n="leave"></button>
+        </div>
+        <p class="banner" id="gNote" hidden></p>
+
+        <nav class="tabs" id="gTabs" aria-label="Mode set"></nav>
+        <section class="modes" id="gModes" aria-label="Modes"></section>
+
+        <section class="panel" aria-label="The virus">
+          <button class="ghost send danger" id="gHack"></button>
+          <span class="hint" id="gHackHint"></span>
+        </section>
+
+        <section class="panel" aria-label="Say something">
+          <div class="row">
+            <input class="text" id="gText" maxlength="24" data-i18n-ph="wordPh" enterkeyhint="send" />
+            <button class="ghost go" id="gSay" data-i18n="send"></button>
+          </div>
+          <span class="hint" data-i18n="wordHint"></span>
+        </section>
+
+        <section class="panel" aria-label="Pictures">
+          <span class="label" data-i18n="pictures"></span>
+          <div class="pics" id="gPics"></div>
+        </section>
+
+        <section class="panel" aria-label="Send your own picture">
+          <span class="label" data-i18n="yourPic"></span>
+          <div class="imgrow">
+            <canvas class="pix pic-pix" id="gUpPreview" width="16" height="16"></canvas>
+            <div class="imgctl">
+              <label class="file">
+                <input type="file" id="gUpFile" accept="image/png,image/jpeg,image/gif,image/webp" />
+                <span data-i18n="pickImage"></span>
+              </label>
+              <input class="text" id="gUpCaption" maxlength="20" data-i18n-ph="captionPh" />
+              <span class="hint" data-i18n="picHint"></span>
+            </div>
+          </div>
+          <button class="ghost send" id="gUpSend" data-i18n="sendPic" disabled></button>
+        </section>
+      </div>
+
+      <!-- PWNED: our own page plays dead for a few seconds, then owns up -->
+      <section class="pwned" id="gPwn" hidden aria-live="assertive">
+        <pre class="pwn-log" id="gPwnLog"></pre>
+        <p class="pwn-big" data-text="I PWNED YOU">I PWNED YOU</p>
+        <p class="pwn-by" id="gPwnBy"></p>
+      </section>
+
+      <!-- out -->
+      <section class="panel" id="gEnd" hidden aria-live="polite">
+        <p class="gbig" id="gEndTitle">DISCONNECTED</p>
+        <p class="hint" id="gEndWhy"></p>
+        <button class="connect" id="gAgain" data-i18n="again"></button>
+      </section>
+    </main>
+    <script type="module" src="/src/guest.js"></script>
+  </body>
+</html>

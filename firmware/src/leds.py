@@ -1,39 +1,53 @@
 # Shared intake animations for both Circuit Playgrounds (ported from the
 # Cyber headgear configurator). 10 NeoPixels per intake.
 #
-# Mode bytes (sent by the CLUE):
+# Built-in mode bytes (sent by the CLUE): the rig's own states
 #   D dark     dark purple, a brighter arc slowly circling   I = alias for D (idle)
-#   X glitch   magenta + cyan bursts and cutouts
-#   H hunt     red scanner sweep               h = heartbeat pulse
-#   r rain     blue drops running down both sides, white lightning flashes
-#   M matrix   green rain drip
 #   R rainbow  slow color wave
 #   P peace    white fade up, hold, fade to off
+#   H hunt     red scanner sweep
 #   F/V virus  takeover: red sweep with glitch stabs (CLUE virus mode)
+#   W standby  blinks white (CLUE sends O after ~2 min)
+#   O off      all pixels off
+#   A audio    mic VU meter: both sides fill from the bottom,
+#              green -> yellow -> red at the top, with a falling peak dot
+# Every other letter is a pushed animation (a recipe, below): Glitch, Rainfall, Matrix,
+# Heartbeat, Netrun, Scanner, Neon, Overclock and the /command looks. A letter with no
+# recipe yet shows Dark.
+#
+# Packets:
 #   C r g b    scanned color (4 bytes): breathes in that color
 #   B r g b r g b  rebreather (7 bytes): breathes between two colors
 #   Z k b rgb rgb  tuning (10 bytes): mode k's brightness % + main / accent colour
 #   S sp w dir   rainbow settings (4 bytes): speed sp/50 x, width w/100 of the
 #                hue wheel, dir 1 forward / 0 reverse
-#   W standby  blinks white (CLUE sends O after ~2 min)
-#   O off      all pixels off
-#   A audio    mic VU meter: both sides fill from the bottom,
-#              green -> yellow -> red at the top, with a falling peak dot
-#   G ghost    dim white wisps drifting round, the odd "boo" flare      (phone /boo)
-#   J pumpkin  orange candle flicker, a yellow core where it burns hot  (phone /pumpkin)
-#   v vampire  blood drips running down each side, the odd black bat cut (phone /vamp)
-#   k frank    green glow, blue-white sparks crackling                  (phone /frank)
-#   f fish     ocean blues rolling round, bubbles sparkling             (phone /fish)
-#   u middle   punchy magenta / red strobe, three jabs a second         (phone /middle)
-#   c censor   fast hot-pink strobe                        (phone /boobs, /dick ...)
-#   n netrun   three cyan packets racing round, a faint magenta trace behind
-#   s scanner  slow amber sweep, a white lock-on flash every 4 s
-#   e neon     half hot-pink, half cyan, buzzing; a half drops out now and then
-#   o overclock  a chase that speeds up and heats from amber to white as the board
-#              moves (its own accelerometer); white-hot strobes when it's going hard
 #   Q m        mute (2 bytes): m = 1 silences every sound, 0 lets them play
 #   N k s      alert (3 bytes) over whatever mode is running: k = c call (holo-call
 #              ring spinning round) / m message (three cyan flashes); s = 1 also beeps
+#   L n k layers   recipe for mode k (n = bytes after n): up to 4 layers of 14 bytes,
+#              kept in NVM so it survives a restart. Each layer:
+#     shape flags speed p1 p2 lo hi gamma  r g b (A)  r g b (B)
+#     speed is signed; lo / hi are 0-255 brightness; gamma / 10 shapes the curve
+#     (0 = 1.0). Layers mix brightest-channel-wins; an OVER layer replaces what's
+#     under it wherever it's lit.
+#     0 FILL    the whole ring at hi (lo while CUT)
+#     1 CHASE   p1 heads round the ring, speed/20 turns a second, tail p2/10 pixels;
+#               USE_B paints each head in B
+#     2 WAVE    sine round the ring: speed/10 rad/s, p1/10 rad per pixel, p2/10 rad
+#               between the sides; USE_B blends A -> B with the wave; MOTION drives
+#               it from the accelerometer and heats it toward white
+#     3 DRIP    p1 drops running down each side, speed/10 pixels a second, one every
+#               p2/10 pixels; USE_B colours them A, B, A+B
+#     4 PULSE   the whole ring: p1 0 heartbeat, 1 breath, 2 strobe (speed/10 Hz, p2 %
+#               on; USE_B alternates A / B), 3 candle flicker (USE_B burns B when hot),
+#               4 a beat every p2/10 s lasting speed/100 s
+#     5 SPARKLE each pixel lights with chance p1/255 a frame; USE_B picks A or B
+#     6 HALF    one half of the intake (p1 0 / 1, mirrored across the mask)
+#     7 SWEEP   like CHASE, the tail on both sides of the head
+#   flags: 1 MIRROR the right side turns the other way, 2 BURST only during glitch
+#   bursts, 4 CUT drops to lo during glitch cuts, 8 BUZZ neon hum, 16 MOTION (see
+#   WAVE; a SPARKLE only fires when the board is moving hard), 32 FLASH only in
+#   random flashes (lightning, boo), 64 OVER, 128 USE_B
 
 import math
 import random
@@ -44,15 +58,15 @@ PURPLE = (160, 60, 255)
 MAG = (255, 43, 214)
 CYAN = (0, 229, 255)
 RED = (255, 30, 30)
-GREEN = (34, 255, 102)
-GREEN_HEAD = (200, 255, 216)
 WHITE = (255, 255, 255)
-RAIN_COLORS = (PURPLE, MAG, CYAN)
 OFF = (0, 0, 0)
 
 def scale(c, k):
     k = max(0.0, min(1.0, k))
     return (int(c[0] * k), int(c[1] * k), int(c[2] * k))
+
+def mix(a, b, w):
+    return (a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w, a[2] + (b[2] - a[2]) * w)
 
 def breath(t):
     return 0.1 + 0.9 * (0.5 - 0.5 * math.cos(t * 2 * math.pi / 5.5)) ** 1.6
@@ -68,19 +82,38 @@ def wheel(h):
     q, u = int(255 * (1 - f)), int(255 * f)
     return [(255, u, 0), (q, 255, 0), (0, 255, u), (0, q, 255), (u, 0, 255), (255, 0, q)][i % 6]
 
-GHOST = (150, 160, 200)
-ORANGE = (255, 80, 0)
-CANDLE = (255, 170, 20)
+NATIVE = "DIRPHFVWOACB"     # built in; every other letter runs a recipe
+PACKETS = {"C": 3, "B": 6, "S": 3, "Z": 8, "N": 2, "Q": 1, "L": 0}   # data bytes that follow; 0 = a length byte first
 
-AMBER = (255, 170, 0)
-HOT = (255, 110, 0)
-NEON_P = (255, 20, 150)
-BLOOD = (200, 0, 10)
-FRANK = (60, 255, 40)
-SEA, SEA2 = (0, 60, 255), (0, 200, 200)
+# recipe shapes + flags (see the top)
+FILL, CHASE, WAVE, DRIP, PULSE, SPARKLE, HALF, SWEEP = range(8)
+MIRROR, BURST, CUT, BUZZ, MOTION, FLASH, OVER, USE_B = 1, 2, 4, 8, 16, 32, 64, 128
+LAYER = 14
 
-MODE_CHARS = "DXHhMRPAIFVWOrGJvkfucnseo"
-PACKETS = {"C": 3, "B": 6, "S": 3, "Z": 8, "N": 2, "Q": 1}   # command -> number of data bytes that follow
+def load_recipes():
+    """Recipes kept in NVM: b"RX", then (key, length, layers) records, length 0 ends."""
+    try:
+        import microcontroller
+        m = microcontroller.nvm
+        if m[0:2] != b"RX":
+            return {}
+        out, p = {}, 2
+        while p + 2 <= len(m) and m[p + 1]:
+            n = m[p + 1]
+            out[chr(m[p])] = bytes(m[p + 2:p + 2 + n])
+            p += 2 + n
+        return out
+    except Exception:
+        return {}
+
+def save_recipes(rc):
+    try:
+        import microcontroller
+        b = b"RX" + b"".join(bytes((ord(k), len(v))) + v for k, v in rc.items()) + b"\x00\x00"
+        if len(b) <= len(microcontroller.nvm):
+            microcontroller.nvm[0:len(b)] = b
+    except Exception as e:
+        print("nvm:", e)
 
 # Sounds. Segments: (start s, step s, notes Hz, side); the notes play one after
 # another, step each, 0 = rest. side 0 = left, 1 = right, 2 = both.
@@ -105,21 +138,26 @@ ALERT_TIME = {"m": 1.0, "c": 5.2}   # seconds the lights show the alert
 RING = 2.8                          # call: one ringtone (2.24 s) plus a breath
 
 class Parser:
-    """Turns a byte stream into commands. Handles C/B packets split across reads."""
+    """Turns a byte stream into commands. Handles packets split across reads."""
     def __init__(self):
         self.cmd = None
+        self.need = 0
         self.pending = []
     def feed(self, data):
         out = []
         for byte in data:
             if self.cmd:
-                self.pending.append(byte)
-                if len(self.pending) == PACKETS[self.cmd]:
+                if self.need < 0:                 # L: this byte is the length
+                    self.need = byte
+                else:
+                    self.pending.append(byte)
+                if len(self.pending) == self.need:
                     out.append((self.cmd, tuple(self.pending)))
                     self.cmd = None
             elif chr(byte) in PACKETS:
                 self.cmd, self.pending = chr(byte), []
-            elif chr(byte) in MODE_CHARS:
+                self.need = PACKETS[self.cmd] or -1
+            elif 65 <= byte <= 90 or 97 <= byte <= 122:   # any other letter is a mode
                 out.append((chr(byte), None))
         return out
 
@@ -208,8 +246,8 @@ VU_COLORS = ((0, 255, 40), (90, 255, 0), (255, 200, 0), (255, 110, 0), (255, 0, 
 class Lens:
     def __init__(self, pixels, key, mic=None, buzz=None, accel=None):
         self.mic = mic            # Mic() enables mode A
-        self.accel = accel        # LIS3DH: overclock follows the motion (else it idles)
-        self.energy = 0.0         # overclock: 0 still .. 1 going hard
+        self.accel = accel        # LIS3DH: MOTION recipes follow it (else they idle)
+        self.energy = 0.0         # MOTION: 0 still .. 1 going hard
         self.oc_phase = 0.0
         self.buzz = buzz          # Buzzer() lets alerts beep
         self.alert_k = None       # N alert showing over the mode: "c" / "m"
@@ -225,27 +263,33 @@ class Lens:
         self.t0 = time.monotonic()
         self.burst = 0.0
         self.cut = 0.0
-        self.seed = 0
         self.last = time.monotonic()
-        self.flash = 0.0          # rain mode: lightning until this time
-        self.flash_c = CYAN
         self.rb = (50, 30, 1)     # rainbow speed / width / direction bytes
         self.tune = {}            # mode -> (brightness 0-1, main rgb, accent rgb), from Z
         self.rb_phase = 0.0
+        self.recipes = load_recipes()   # mode -> layer bytes, pushed from the phone
+        self.save_at = 0.0        # NVM write pending (batched: the phone sends them all at once)
+        self.layers = []          # the running recipe, decoded
+        self.fx = []              # per layer: FLASH until, and its colour
+        self.fxc = []
+        self.motion = False
+        print("recipes:", "".join(sorted(self.recipes)) or "none")
 
     def set_color(self, rgb):
         self.custom = rgb
         self.mode = "C"
         self.t0 = time.monotonic()
+        self._load()
 
     def set_breathe(self, pair):
         if self.mode != "B":
             self.t0 = time.monotonic()
         self.pair = pair
         self.mode = "B"
+        self._load()
 
     def apply(self, m, data=None):
-        """Run one parsed command (mode byte, C color or B color pair)."""
+        """Run one parsed command (mode byte or packet)."""
         if m == "C":
             if data != self.custom or self.mode != "C":
                 self.set_color(data)
@@ -264,6 +308,14 @@ class Lens:
                 if self.buzz.muted:              # cut anything already playing
                     self.buzz.segs = None
                     self.buzz._tone(0)
+        elif m == "L":
+            if data:
+                k, layers = chr(data[0]), bytes(data[1:])
+                if self.recipes.get(k) != layers:
+                    self.recipes[k] = layers
+                    self.save_at = time.monotonic() + 2
+                    if k == self.mode:
+                        self._load()
         else:
             self.set_mode(m)
 
@@ -310,6 +362,19 @@ class Lens:
             if m == "F" and self.buzz:
                 self.buzz.play("a")       # the virus owns the rig: sound the alarm
         self.mode = m
+        self._load()
+
+    def _load(self):
+        """Decode the running mode's recipe; built-in modes have none."""
+        rc = b"" if self.mode in NATIVE else self.recipes.get(self.mode, b"")
+        self.layers = []
+        for o in range(0, len(rc) - LAYER + 1, LAYER):
+            s, fl, sp, p1, p2, lo, hi, gm = rc[o:o + 8]
+            self.layers.append((s, fl, sp - 256 if sp > 127 else sp, p1, p2, lo / 255, hi / 255,
+                                (gm or 10) / 10, tuple(rc[o + 8:o + 11]), tuple(rc[o + 11:o + 14])))
+        self.fx = [0.0] * len(self.layers)
+        self.fxc = [l[8] for l in self.layers]
+        self.motion = any(l[1] & MOTION for l in self.layers)
 
     def _glitch_clock(self, dt):
         if self.cut > 0:
@@ -326,14 +391,94 @@ class Lens:
         t = self.tune.get("H" if m in "FV" else m)
         return t[1 + slot] if t else default
 
+    def _mix(self, i, t, now):
+        """One pixel of the running recipe."""
+        key = self.key
+        r = g = b = 0.0
+        for j, (s, fl, sp, p1, p2, lo, hi, gm, ca, cb) in enumerate(self.layers):
+            if fl & FLASH:
+                if now >= self.fx[j]:
+                    continue
+                ca = self.fxc[j]
+            if fl & BURST and self.burst <= 0:
+                continue
+            idx = N - 1 - i if fl & MIRROR and key % 2 else i
+            c, v = ca, hi
+            if s == CHASE or s == SWEEP:
+                best, near = 0.0, N
+                for h in range(p1 or 1):
+                    d = (t * sp / 20 * N + h * N / (p1 or 1) - idx) % N
+                    if s == SWEEP:
+                        d = min(d, N - d)
+                    near = min(near, d)
+                    best = max(best, 1 - d * 10 / (p2 or 10))
+                v = lo + (hi - lo) * best ** gm
+                if fl & USE_B and near < 1:
+                    c, v = cb, hi
+            elif s == WAVE:
+                ph = self.oc_phase * 6.283 if fl & MOTION else t * sp / 10
+                w = 0.5 + 0.5 * math.sin(ph + idx * p1 / 10 + key * p2 / 10)
+                v = lo + (hi - lo) * w ** gm
+                if fl & USE_B:
+                    c = mix(ca, cb, w)
+                if fl & MOTION:
+                    c = mix(c, WHITE, self.energy)
+            elif s == DRIP:
+                side = 0 if i < 5 else 1
+                down = i if i < 5 else 9 - i            # 0 = top of this side .. 4 = bottom
+                best, which, n = 0.0, 0, p1 or 1
+                for k in range(n):
+                    pos = (t * sp / 10 * (1 + 0.15 * (k - (n - 1) / 2)) + key * 1.7 + side * 3.3
+                           + k * 2.9) % ((p2 or 90) / 10)
+                    d = pos - down
+                    lv = 1.0 if 0 <= d < 1 else (3 - d) / 2 * 0.45 if 1 <= d < 3 else 0.0
+                    if lv > best:
+                        best, which = lv, k
+                v = lo + (hi - lo) * best
+                if fl & USE_B:
+                    c = (ca, cb, mix(ca, cb, 0.5))[which % 3]
+            elif s == PULSE:
+                if p1 == 0:
+                    w = heart(t)
+                elif p1 == 1:
+                    w = breath(t)
+                elif p1 == 2:                           # strobe
+                    ph = t * sp / 10
+                    w = 1.0 if ph % 1 < p2 / 100 else 0.0
+                    if fl & USE_B and int(ph) % 2:
+                        c = cb
+                elif p1 == 3:                           # candle flicker
+                    w = 0.7 + 0.15 * math.sin(t * 13 + i) + 0.15 * math.sin(t * 7.3 + i * 2.1 + key)
+                    if fl & USE_B and w > 0.85:
+                        c = cb
+                else:                                   # a beat every p2/10 s
+                    w = 1.0 if t % ((p2 or 40) / 10) < sp / 100 else 0.0
+                v = lo + (hi - lo) * min(1.0, w) ** gm
+            elif s == SPARKLE:
+                if fl & MOTION and self.energy < 0.7:
+                    continue
+                if random.random() * 255 >= p1:
+                    continue
+                if fl & USE_B and random.random() < 0.5:
+                    c = cb
+            elif s == HALF:
+                if ((i < 5) != bool(key % 2)) != bool(p1):
+                    continue
+            if fl & CUT and self.cut > 0:
+                v = lo if s == FILL or s == HALF else 0.0
+            if fl & BUZZ:
+                v *= 0.85 + 0.15 * math.sin(t * 47 + i)
+            if v <= 0:
+                continue
+            v = min(1.0, v)
+            if fl & OVER:
+                r, g, b = c[0] * v, c[1] * v, c[2] * v
+            else:
+                r, g, b = max(r, c[0] * v), max(g, c[1] * v), max(b, c[2] * v)
+        return (int(r), int(g), int(b))
+
     def _pixel(self, i, t):
         m, key = self.mode, self.key
-        if m == "D":
-            # dark purple with a brighter arc slowly circling (no breathing);
-            # the two intakes turn opposite ways
-            idx = N - 1 - i if key % 2 else i
-            d = (t * 0.25 * N - idx) % N            # 0.25 turns a second
-            return scale(self._col("D", 0, PURPLE), 0.12 + 0.88 * max(0.0, 1 - d / 4) ** 2)
         if m == "C":
             # quick white flash on lock, then breathe in the scanned color
             f = time.monotonic() - self.t0
@@ -344,43 +489,12 @@ class Lens:
             # rebreather: drift between the two colors, rippling around the ring
             w = 0.5 - 0.5 * math.cos((t - i / N * 0.8) * 2 * math.pi / 5.5)
             a, b = self.pair[:3], self.pair[3:]
-            return scale((a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w,
-                          a[2] + (b[2] - a[2]) * w), 0.35 + 0.65 * w)
-        if m == "r":
-            if t < self.flash:                    # lightning, glitch colors
-                return self.flash_c if random.random() > 0.15 else OFF
-            s = i if i < 5 else 9 - i            # 0 = top of this side .. 4 = bottom
-            side = 0 if i < 5 else 1
-            a, z = self._col("r", 0, PURPLE), self._col("r", 1, CYAN)
-            drops = (a, ((a[0] + z[0]) // 2, (a[1] + z[1]) // 2, (a[2] + z[2]) // 2), z) if "r" in self.tune else RAIN_COLORS
-            c, best = drops[0], 0.0
-            for k, speed in ((0, 3.1), (1, 2.3), (2, 2.7)):  # drops per side
-                p = (t * speed + key * 1.7 + side * 3.3 + k * 2.9) % 9
-                d = p - s
-                if 0 <= d < 1:
-                    k_lvl = 1.0
-                elif 1 <= d < 3:
-                    k_lvl = (3 - d) / 2 * 0.45     # fading tail above the head
-                else:
-                    continue
-                if k_lvl > best:
-                    c, best = drops[k], k_lvl
-            return scale(c, 0.04 + 0.96 * best)
+            return scale(mix(a, b, w), 0.35 + 0.65 * w)
         if m == "W":
             # standby: blink slows from 0.6 s to 4 s over 2 min (same curve as the CLUE)
             k = (4.0 - 0.6) / 120
             ph = math.log(1 + k * (t - self.t0) / 0.6) / k
             return WHITE if ph % 1.0 < 0.5 else OFF
-        if m == "X":
-            if self.cut > 0:
-                return OFF
-            r = random.random()
-            mg, cy = self._col("X", 0, MAG), self._col("X", 1, CYAN)
-            if self.burst > 0:
-                return (mg if random.random() > 0.5 else cy) if r > 0.3 else OFF
-            return scale(mg, 0.85) if r > 0.93 else scale(cy, 0.22)
-        if m == "h":
-            return scale(self._col("h", 0, RED), 0.06 + 0.94 * heart(t))
         if m in ("H", "F", "V"):
             idx = N - 1 - i if key % 2 else i
             pos = (t * N * 0.45) % N
@@ -390,83 +504,9 @@ class Lens:
             if m != "H" and self.burst > 0 and random.random() > 0.6:
                 c = self._col(m, 1, MAG) if random.random() > 0.5 else WHITE   # virus stabs
             return c
-        if m == "M":
-            d = (t * N * 0.55 + key * 3.1) % N - i
-            if d < 0:
-                d += N
-            g = self._col("M", 0, GREEN)
-            if d < 1:
-                return GREEN_HEAD if g is GREEN else tuple(min(255, v // 2 + 128) for v in g)   # pale head
-            return scale(g, (1 - d / (N * 0.5)) ** 1.6 if d < N * 0.5 else 0.03)
         if m == "R":
             x = (i / N) * 0.5 + key * 0.5          # left intake leads, right follows
             return wheel(x * self.rb[1] / 100 - self.rb_phase)
-        if m == "G":
-            if t < self.flash:                       # boo!
-                return scale(GHOST, 0.9)
-            w = 0.5 + 0.5 * math.sin(t * 1.3 + i * 0.9 + key * 2.0)
-            return scale(GHOST, 0.04 + 0.3 * w ** 3)
-        if m == "J":
-            k = 0.7 + 0.15 * math.sin(t * 13 + i) + 0.15 * math.sin(t * 7.3 + i * 2.1 + key)
-            c = ORANGE if k < 0.85 else CANDLE        # hot moments burn yellow
-            return scale(c, k)
-        if m == "v":
-            if self.cut > 0:                         # a bat passes
-                return OFF
-            s = i if i < 5 else 9 - i                # 0 = top of this side .. 4 = bottom
-            d = (t * 1.2 + (i >= 5) * 0.7 + key * 0.3) % 6 - s
-            if 0 <= d < 1:
-                return BLOOD
-            return scale(BLOOD, 0.08 + (0.4 * (2 - d) / 2 if 1 <= d < 2 else 0))
-        if m == "k":
-            if self.burst > 0 and random.random() > 0.7:
-                return (200, 220, 255)               # spark
-            return scale(FRANK, 0.3 + 0.25 * math.sin(t * 2 + i * 0.6))
-        if m == "c":
-            return MAG if (t * 8) % 1 < 0.5 else scale(MAG, 0.12)
-        if m == "n":
-            idx = N - 1 - i if key % 2 else i
-            best = 0.0
-            for k in range(3):                       # three packets, a third of a lap apart
-                d = (t * N * 1.6 + k * N / 3 - idx) % N
-                best = max(best, 1 - d / 2.5)
-            if best > 0:
-                return scale(self._col("n", 0, CYAN), 0.08 + 0.92 * best)
-            return scale(self._col("n", 1, MAG), 0.05)
-        if m == "s":
-            if t % 4.0 < 0.2:
-                return scale(WHITE, 0.8)             # lock-on
-            idx = N - 1 - i if key % 2 else i
-            d = abs(idx - (t * N * 0.3) % N)
-            d = min(d, N - d)
-            return scale(self._col("s", 0, AMBER), max(0.0, 1 - d / 1.5) ** 2 * 0.95 + 0.03)
-        if m == "e":
-            pink = (i < 5) != bool(key % 2)          # mirror the halves across the mask
-            if self.cut > 0 and pink:
-                return scale(NEON_P, 0.1)            # that half's tube flickers out
-            c = self._col("e", 0, NEON_P) if pink else self._col("e", 1, CYAN)
-            return scale(c, 0.8 + 0.15 * math.sin(t * 47 + i))   # the buzz
-        if m == "o":
-            e = self.energy
-            if e > 0.7 and random.random() < 0.15:
-                return WHITE                         # white-hot strobe
-            idx = N - 1 - i if key % 2 else i
-            w = 0.5 + 0.5 * math.sin(self.oc_phase * 6.283 + idx * 0.9)
-            c = self._col("o", 0, HOT)
-            c = (c[0] + (255 - c[0]) * e, c[1] + (255 - c[1]) * e, c[2] + (255 - c[2]) * e)
-            return scale(c, 0.15 + 0.85 * w)
-        if m == "u":
-            p = (t * 3) % 1
-            if p < 0.3:
-                return MAG if int(t * 3) % 2 else RED
-            return scale(MAG, 0.06)
-        if m == "f":
-            if random.random() < 0.004:
-                return (180, 220, 255)               # bubble
-            idx = N - 1 - i if key % 2 else i
-            w = 0.5 + 0.5 * math.sin(t * 1.5 + idx * 0.9)
-            return scale((int(SEA[0] + (SEA2[0] - SEA[0]) * w), int(SEA[1] + (SEA2[1] - SEA[1]) * w),
-                          int(SEA[2] + (SEA2[2] - SEA[2]) * w)), 0.3 + 0.5 * w)
         if m == "P":
             f = time.monotonic() - self.t0
             if f < 0.4:
@@ -476,7 +516,13 @@ class Lens:
             else:
                 k = max(0, 1 - ((f - 1.6) / 4) ** 0.8)
             return scale(self._col("P", 0, WHITE), k)
-        return OFF
+        if m == "O":
+            return OFF
+        # D, and any pushed mode whose recipe hasn't arrived: dark purple with a
+        # brighter arc slowly circling; the two intakes turn opposite ways
+        idx = N - 1 - i if key % 2 else i
+        d = (t * 0.25 * N - idx) % N            # 0.25 turns a second
+        return scale(self._col("D", 0, PURPLE), 0.12 + 0.88 * max(0.0, 1 - d / 4) ** 2)
 
     def _vu(self, now, dt):
         lvl = self.mic.level() if self.mic else 0.0
@@ -505,6 +551,9 @@ class Lens:
         now = time.monotonic()
         dt = min(0.05, now - self.last)
         self.last = now
+        if self.save_at and now > self.save_at:
+            self.save_at = 0.0
+            save_recipes(self.recipes)
         if self.buzz:
             self.buzz.update(now)
         if self.alert_k:
@@ -519,12 +568,11 @@ class Lens:
             self._vu(now, dt)
             return
         self._glitch_clock(dt)
-        if self.mode == "r" and now > self.flash + 1.5 and random.random() < 0.006:
-            self.flash = now + 0.06 + random.random() * 0.18   # lightning
-            self.flash_c = self._col("r", 0, MAG) if random.random() > 0.5 else self._col("r", 1, CYAN)
-        if self.mode == "G" and now > self.flash + 2 and random.random() < 0.006:
-            self.flash = now + 0.15                         # ghost: boo
-        if self.mode == "o":                 # overclock: motion -> energy -> chase speed
+        for j, l in enumerate(self.layers):      # lightning / boo: random, not too often
+            if l[1] & FLASH and now > self.fx[j] + 1.5 and random.random() < 0.006:
+                self.fx[j] = now + 0.06 + random.random() * 0.18
+                self.fxc[j] = l[9] if l[1] & USE_B and random.random() < 0.5 else l[8]
+        if self.motion:                      # motion -> energy -> wave speed
             if self.accel:
                 try:
                     x, y, z = self.accel.acceleration
@@ -542,7 +590,8 @@ class Lens:
         t = now
         tn = self.tune.get("H" if self.mode in "FV" else self.mode)
         k = tn[0] if tn else 1.0                      # per-mode brightness
+        recipe = bool(self.layers)
         for i in range(N):
-            c = self._pixel(i, t)
+            c = self._mix(i, t, now) if recipe else self._pixel(i, t)
             self.px[i] = c if k >= 1 else scale(c, k)
         self.px.show()

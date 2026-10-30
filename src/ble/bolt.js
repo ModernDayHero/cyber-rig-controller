@@ -259,7 +259,7 @@ export function lookAnimation(look, s) {
         return behind < 0.5 ? 2 : behind < 1.4 ? 1 : 0;
       }));
       frames.push(grid(() => 3));                              // lock-on
-      return { palette: [[0, 0, 0], dim(AMBER, 0.3), AMBER, dim(WHITE, 0.7)], frames, fps: 8, fade: false };
+      return { palette: [[0, 0, 0], dim(AMBER, 0.3), AMBER, dim(GREEN, 0.8)], frames, fps: 8, fade: false };
     }
 
     case 'e': { // neon: pink half, cyan half, the pink tube flickering out now and then

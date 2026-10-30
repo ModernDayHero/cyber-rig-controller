@@ -7,7 +7,7 @@
 // its own, if it has one; else the art is drawn), rgb (title colour), cmd: false = not a
 // /command of its own.
 //
-// Typing any word on the SAY tab: a library word shows its picture, anything else
+// Typing any word on the IMAGE tab: a library word shows its picture, anything else
 // shows as text. /word does the same; an unknown /word gets the "?".
 
 export const PICS = {
@@ -421,11 +421,35 @@ for (const [id, p] of Object.entries(PICS)) {
 CENSORED.id = 'censor';
 for (const w of CENSORED.words) INDEX.set(norm(w), CENSORED);
 
+// Pictures uploaded on the IMAGE tab (image.js toPic), kept on this phone. Same shape as
+// PICS, called up by their name; one with a built-in's name wins over it.
+const MINE_KEY = 'rig-pics';
+export const MINE = new Map();
+try { for (const p of JSON.parse(localStorage.getItem(MINE_KEY)) || []) MINE.set(p.id, p); } catch {}
+const saveMine = () => {
+  try { localStorage.setItem(MINE_KEY, JSON.stringify([...MINE.values()])); } catch { return false; }
+  return true;
+};
+export const picId = norm;
+
+/** Add (or replace) an uploaded picture. false if the phone's storage is full. */
+export function addPic(p) {
+  MINE.set(p.id, p);
+  if (saveMine()) return true;
+  MINE.delete(p.id);
+  return false;
+}
+export function removePic(id) {
+  MINE.delete(id);
+  saveMine();
+}
+
 /** The library entry for a word or phrase ("trick or treat" -> pumpkin), or null. */
 export function lookup(text) {
   const whole = norm(text);
-  if (INDEX.has(whole)) return INDEX.get(whole);
-  for (const w of text.split(/\s+/)) if (INDEX.has(norm(w))) return INDEX.get(norm(w));
+  const find = (w) => MINE.get(w) || INDEX.get(w);
+  if (find(whole)) return find(whole);
+  for (const w of text.split(/\s+/)) if (find(norm(w))) return find(norm(w));
   return null;
 }
 

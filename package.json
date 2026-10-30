@@ -12,5 +12,8 @@
     "vite-plugin-pwa": "^2.0.0"
   },
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "qrcode-generator": "^1.4.4"
+  }
 }

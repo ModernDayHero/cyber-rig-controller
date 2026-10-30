@@ -1,15 +1,27 @@
 import './style.css';
-import { SETS, BREATHE_IDX, RAINBOW_IDX, HACK_IDX, HACK_TIMER, RAINBOW, POWER, TUNE, hex, rgb, modeOf, tuneOf } from './config.js';
-import { PICS, lookup, indexed } from './library.js';
+import { SETS, HACK_TIMER, RAINBOW, POWER, TUNE, hex, rgb, modeOf, tuneOf } from './config.js';
+import { PICS, MINE, lookup, indexed, addPic, removePic, picId } from './library.js';
 import { Rig } from './rig.js';
-import { decodeImage, toBolt, toHat, paintPreview, paintHat } from './image.js';
+import { decodeImage, toBolt, toHat, toPic, paintPreview, paintHat } from './image.js';
 import { EFFECTS, rgb323, fromRgb323 } from './ble/spotled.js';
 import { Status } from './ble/device.js';
 import { setupDrive } from './drive.js';
+import { GuestHost, GUEST_MINUTES, DEFAULT_RELAY, showCode } from './guests.js';
+import { setupBadge } from './badgetab.js';
+import { ascii, LANGS } from './i18n.js';
+import qrcode from 'qrcode-generator';
 
 const $ = (id) => document.getElementById(id);
 const rig = new Rig();
 setupDrive(rig, $);
+
+// Segmented buttons: wire a data-* value to fn / light the one that matches.
+const segPick = (id, attr, fn) => {
+  for (const b of $(id).querySelectorAll('button')) b.addEventListener('click', () => fn(b.dataset[attr]));
+};
+const segShow = (id, attr, val) => {
+  for (const b of $(id).querySelectorAll('button')) b.classList.toggle('on', b.dataset[attr] === String(val));
+};
 
 // ---------- set tabs + mode tiles ----------
 const tabEls = {};
@@ -37,7 +49,7 @@ function buildTiles(setKey) {
     b.innerHTML = `<span class="num">${m.key}</span><span class="name">${m.name}</span>` +
       `<span class="hint">${m.hint}</span><span class="bar"></span>`;
     b.addEventListener('click', () => {
-      if (!rig.setMode(setKey, i)) flashLocked();
+      if (!rig.setMode(setKey, i)) refused();
     });
     $('modes').append(b);
     return b;
@@ -92,45 +104,99 @@ function paintRainbow({ speed, width, dir }) {
   for (const b of $('rbDir').querySelectorAll('button')) b.classList.toggle('on', Number(b.dataset.dir) === dir);
 }
 
-// ---------- tune: brightness + colours for the selected mode ----------
-let tuneKey = null;
-$('tuneBright').addEventListener('input', () => {
-  $('tuneBrightOut').textContent = `${$('tuneBright').value}%`;
-  if (tuneKey) rig.setTune(tuneKey, { bright: Number($('tuneBright').value) });
-});
-$('tuneReset').addEventListener('click', () => tuneKey && rig.resetTune(tuneKey));
-function renderTune(s) {
-  const m = modeOf(s), key = m.key, t = tuneOf(s, key), d = TUNE[key];
-  $('tunepanel').hidden = !d || s.power !== POWER.ON;
-  if (!d) return;
-  $('tuneName').textContent = m.name.toUpperCase();
-  if (document.activeElement !== $('tuneBright')) $('tuneBright').value = t.bright;
-  $('tuneBrightOut').textContent = `${t.bright}%`;
-  $('tuneReset').disabled = !s.tunes[key];
-  if (tuneKey !== key) {                    // rebuild the colour swatches for this mode
-    tuneKey = key;
-    $('tuneColors').replaceChildren(...d.labels.map((label, i) => {
-      const wrap = document.createElement('label');
-      wrap.className = 'swatch';
-      const inp = document.createElement('input');
-      inp.type = 'color';
-      inp.addEventListener('input', () => {
-        const colors = tuneOf(rig.state, key).colors.map(hex);
-        colors[i] = inp.value;
-        rig.setTune(key, { colors });
-      });
-      const span = document.createElement('span');
-      span.textContent = label;
-      wrap.append(inp, span);
-      return wrap;
-    }));
-  }
-  [...$('tuneColors').querySelectorAll('input')].forEach((inp, i) => {
-    if (document.activeElement !== inp) inp.value = hex(t.colors[i]);
-  });
-}
+// ---------- SET tab, PATTERNS: a fold per pattern with its brightness + colours ----------
+// (Rainbow and Rebreather keep their own controls in theirs.) Built once; renderPatterns
+// fills in the values.
+const patternEls = {};
+const seenKeys = new Set();
+// The virus isn't a pattern you pick any more, but its colours live in its own fold (VIRUS).
+for (const m of [...Object.values(SETS).flatMap((st) => st.modes), { key: 'H', name: 'Virus' }]) {
+  const key = m.key, d = TUNE[key];
+  if (!d || seenKeys.has(key)) continue;
+  seenKeys.add(key);
+  const fold = document.createElement('details');
+  fold.className = 'fold';
+  fold.dataset.fold = key;
+  const sum = document.createElement('summary');
+  const dot = document.createElement('span');
+  dot.className = 'dot';
+  sum.append(dot, m.name.toUpperCase());
+  const body = document.createElement('div');
+  body.className = 'fold-body';
 
-// ---------- hack timer (how often the virus hijacks on its own) ----------
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = '<span class="label">BRIGHT</span><input type="range" min="10" max="100" step="5" /><output></output>';
+  const [range, out] = [row.querySelector('input'), row.querySelector('output')];
+  range.addEventListener('input', () => {
+    out.textContent = `${range.value}%`;
+    rig.setTune(key, { bright: Number(range.value) });
+  });
+  body.append(row);
+
+  const swatches = d.labels.map((label, i) => {
+    const wrap = document.createElement('label');
+    wrap.className = 'swatch';
+    const inp = document.createElement('input');
+    inp.type = 'color';
+    inp.addEventListener('input', () => {
+      const colors = tuneOf(rig.state, key).colors.map(hex);
+      colors[i] = inp.value;
+      rig.setTune(key, { colors });
+    });
+    const span = document.createElement('span');
+    span.textContent = label;
+    wrap.append(inp, span);
+    return inp;
+  });
+  if (swatches.length) {
+    const box = document.createElement('div');
+    box.className = 'tunecolors';
+    box.append(...swatches.map((inp) => inp.parentElement));
+    body.append(box);
+  }
+  if (key === 'R') { $('rbpanel').hidden = false; body.append($('rbpanel')); }
+  if (key === 'B') { $('breathe').hidden = false; body.append($('breathe')); }
+  if (key === 'r') {
+    const h = document.createElement('span');
+    h.className = 'hint';
+    h.textContent = 'Hat lightning strikes: SET → HAT → BOLTS.';
+    body.append(h);
+  }
+  const reset = document.createElement('button');
+  reset.className = 'ghost reset';
+  reset.textContent = 'RESET TO DEFAULT';
+  reset.addEventListener('click', () => rig.resetTune(key));
+  body.append(reset);
+
+  fold.append(sum, body);
+  if (key === 'H') $('virusBody').append(...body.childNodes);   // inside the VIRUS fold
+  else $('patternFolds').append(fold);
+  patternEls[key] = { fold, dot, range, out, swatches, reset };
+}
+function renderPatterns(s) {
+  for (const [key, el] of Object.entries(patternEls)) {
+    const t = tuneOf(s, key);
+    const c = key === 'B' ? s.pair[0] : t.colors[0];
+    el.dot.style.background = key === 'R' ? 'linear-gradient(90deg,#ff1e1e,#22ff66,#00e5ff,#a03cff)' : c ? hex(c) : '#888';
+    if (document.activeElement !== el.range) el.range.value = t.bright;
+    el.out.textContent = `${t.bright}%`;
+    el.swatches.forEach((inp, i) => { if (document.activeElement !== inp) inp.value = hex(t.colors[i]); });
+    el.reset.disabled = !s.tunes[key];
+  }
+}
+// RIG tab shortcut: straight to the current pattern's fold.
+$('tuneLink').addEventListener('click', () => {
+  const m = modeOf(rig.state), el = patternEls[m.lookAs && !TUNE[m.key] ? m.lookAs : m.key];
+  showView('set');
+  if (el) {
+    el.fold.open = true;
+    el.fold.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+});
+
+// ---------- the virus (SET tab): release it now, how often it hijacks on its own ----------
+$('hackNow').addEventListener('click', () => { if (!rig.hack()) refused(); });
 const hackBtns = HACK_TIMER.map((p) => {
   const b = document.createElement('button');
   b.textContent = p.label;
@@ -147,7 +213,7 @@ function renderHackTimer(t) {
 
 // ---------- incoming call / message, slash commands ----------
 // The CLUE's terminal font is plain ASCII, so the text goes over upper-cased and stripped.
-const alertText = () => $('alertText').value.toUpperCase().replace(/[^ -~]/g, '').replace(/\s+/g, ' ').trim();
+const alertText = () => ascii($('alertText').value).toUpperCase().replace(/\s+/g, ' ').trim();
 function sendAlert(kind) {
   rig.alert(kind, alertText());
   const b = $('alertSend').querySelector(`[data-kind="${kind}"]`);
@@ -162,19 +228,19 @@ for (const b of $('showCmd').querySelectorAll('button')) b.addEventListener('cli
 const MODE_CMDS = {};
 for (const [set, { modes }] of Object.entries(SETS)) {
   modes.forEach((m, i) => {
-    MODE_CMDS[m.name.toLowerCase().replace(/[^a-z0-9]/g, '')] = () => { if (!rig.setMode(set, i)) flashLocked(); };
+    MODE_CMDS[m.name.toLowerCase().replace(/[^a-z0-9]/g, '')] = () => { if (!rig.setMode(set, i)) refused(); };
   });
 }
 MODE_CMDS.audio = MODE_CMDS.vu;
 const SLASH = {
   ...MODE_CMDS,
-  hack: () => rig.hack(),               // the HACK mode is the virus: same thing
+  hack: () => { if (!rig.hack()) refused(); },   // the HACK mode is the virus: same thing
   purge: () => rig.purge(),
 };
 const LISTED = ['/hack', '/purge', ...Object.keys(PICS).filter((id) => PICS[id].cmd !== false).map((id) => '/' + id),
   ...Object.keys(MODE_CMDS).filter((n) => n !== 'audio').map((n) => '/' + n)].join(' ');
 
-// SAY: a /command runs (a mode, /hack, /purge); a picture word (with or without the /)
+// IMAGE tab text box: a /command runs (a mode, /hack, /purge); a picture word (with or without the /)
 // shows its picture; any other word shows as text; an unknown /word gets the "?".
 function say() {
   const v = $('alertText').value.trim();
@@ -193,30 +259,107 @@ function say() {
 $('alertText').addEventListener('keydown', (e) => { if (e.key === 'Enter') say(); });
 $('sayGo').addEventListener('click', say);
 
-// The picture library, one button each, drawn from the same art the CLUE gets.
-for (const p of Object.values(PICS)) {
-  if (p.cmd === false) continue;
-  const b = document.createElement('button');
+// The picture library, one button each, drawn from the same art the CLUE gets. Your
+// saved pictures come first, with an x to delete them.
+function picCanvas(p) {
   const cv = document.createElement('canvas');
   cv.width = cv.height = 16;
   const g = cv.getContext('2d'), { palette, rows } = indexed(p);
   rows.forEach((r, y) => r.forEach((v, x) => { if (v) { g.fillStyle = palette[v]; g.fillRect(x, y, 1, 1); } }));
-  const label = document.createElement('span');
-  label.textContent = p.id.toUpperCase();
-  b.append(cv, label);
-  b.setAttribute('aria-label', `Show ${p.id}`);
-  b.addEventListener('click', () => rig.showPic(p));
-  $('picGrid').append(b);
+  return cv;
 }
+function buildPics() {
+  const mine = [...MINE.values()], built = Object.values(PICS).filter((p) => p.cmd !== false && !MINE.has(p.id));
+  $('picGrid').replaceChildren(...[...mine, ...built].map((p) => {
+    const b = document.createElement('button');
+    const label = document.createElement('span');
+    label.textContent = p.id.toUpperCase();
+    b.append(picCanvas(p), label);
+    b.setAttribute('aria-label', `Show ${p.id}`);
+    b.addEventListener('click', () => rig.showPic(p));
+    if (MINE.has(p.id)) {
+      b.classList.add('mine');
+      const x = document.createElement('span');
+      x.className = 'del';
+      x.textContent = '×';
+      x.setAttribute('role', 'button');
+      x.setAttribute('aria-label', `Delete ${p.id}`);
+      x.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!confirm(`Delete ${p.id.toUpperCase()} from the library?`)) return;
+        removePic(p.id);
+        buildPics();
+      });
+      b.append(x);
+    }
+    return b;
+  }));
+}
+buildPics();
 
-// ---------- views: RIG / BOLT / HAT / SAY ----------
-const VIEW_KEY = 'rig-view';
-let view = localStorage.getItem(VIEW_KEY) || 'rig';
+// ---------- new picture: upload -> 16x16 library picture (CLUE, hat, BOLT) ----------
+let picSrc = null, picFit = 'contain', picNew = null;
+$('picMask').append(new Option('KEEP ITS MODE', '-'),
+  ...Object.values(SETS).flatMap((s) => s.modes)
+    .filter((m) => m.key !== 'H' && m.key !== 'W')
+    .map((m) => new Option(m.name.toUpperCase(), m.key)));
+const clean = (v) => ascii(v).toUpperCase().replace(/\s+/g, ' ').trim();
+function picFromForm() {
+  if (!picNew) return null;
+  const name = $('picName').value.trim(), id = picId(name);
+  return { id, words: [name], caption: clean($('picCaption').value), mask: $('picMask').value,
+    sound: 'm', ...picNew };
+}
+function renderPicForm() {
+  const ok = !!picNew;
+  $('picShow').disabled = !ok;
+  $('picSave').disabled = !ok || !picId($('picName').value);
+  $('picSave').textContent = MINE.has(picId($('picName').value)) ? 'REPLACE IN LIBRARY' : 'SAVE TO LIBRARY';
+}
+function convertPic() {
+  if (!picSrc) return;
+  picNew = toPic(picSrc, picFit);
+  const { palette, rows } = indexed(picNew);
+  paintPreview($('picPreview'), rows, (i) => rgb(palette[i]));
+  $('picInfo').textContent = `16×16, ${palette.length - 1} colour${palette.length === 2 ? '' : 's'}`;
+  renderPicForm();
+}
+$('picFile').addEventListener('change', async () => {
+  const file = $('picFile').files[0];
+  if (!file) return;
+  try {
+    [{ image: picSrc }] = await decodeImage(file, 1);
+    if (!$('picName').value) $('picName').value = file.name.replace(/\.[^.]*$/, '').slice(0, 16);
+    convertPic();
+  } catch (err) {
+    showBanner(`Couldn't read that image: ${err.message}`);
+  }
+});
+segPick('picFit', 'fit', (f) => { picFit = f; segShow('picFit', 'fit', f); convertPic(); });
+segShow('picFit', 'fit', picFit);
+$('picName').addEventListener('input', renderPicForm);
+$('picShow').addEventListener('click', () => {
+  const p = picFromForm();
+  if (p) rig.showPic({ ...p, id: p.id || 'pic' });
+});
+$('picSave').addEventListener('click', () => {
+  const p = picFromForm();
+  if (!p?.id) return;
+  if (!addPic(p)) return showBanner("The phone's storage is full: delete a picture first.");
+  buildPics();
+  renderPicForm();
+  showBanner(`${p.id.toUpperCase()} saved. Type ${p.id} (or /${p.id}) to show it.`);
+});
+
+// ---------- views: RIG / BOLT / HAT / BADGE / IMAGE / SET ----------
+const VIEW_KEY = 'rig-view', VIEWS = ['rig', 'bolt', 'hat', 'badge', 'image', 'set'];
+let view = localStorage.getItem(VIEW_KEY);
+if (!VIEWS.includes(view)) view = view === 'say' ? 'image' : 'rig';
 function showView(v) {
   view = v;
   try { localStorage.setItem(VIEW_KEY, v); } catch {}
   for (const b of $('views').querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === v);
-  for (const k of ['rig', 'bolt', 'hat', 'say']) $(`view-${k}`).hidden = k !== v;
+  for (const k of VIEWS) $(`view-${k}`).hidden = k !== v;
 }
 for (const b of $('views').querySelectorAll('button')) b.addEventListener('click', () => showView(b.dataset.view));
 showView(view);
@@ -234,12 +377,6 @@ const boltLookEls = BOLT_LOOKS.map(([key, name]) => {
   $('boltLooks').append(b);
   return [key, b];
 });
-const segPick = (id, attr, fn) => {
-  for (const b of $(id).querySelectorAll('button')) b.addEventListener('click', () => fn(b.dataset[attr]));
-};
-const segShow = (id, attr, val) => {
-  for (const b of $(id).querySelectorAll('button')) b.classList.toggle('on', b.dataset[attr] === String(val));
-};
 segPick('boltFollow', 'follow', (v) => rig.setBolt({ follow: v === '1' }, { now: true }));
 segPick('boltShake', 'shake', (v) => rig.setBolt({ shake: v === '1' }, { now: true }));
 let boltPane = rig.state.bolt.content.type;
@@ -377,7 +514,6 @@ function renderHat(h) {
   $('hatClock').hidden = !clock;
   segShow('hatScreen', 'screen', h.screen);
   segShow('hatLightning', 'lightning', h.lightning);
-  $('hatOwn').classList.toggle('dim', h.follow);
   $('hatEffect').value = h.effect;
   $('hatMs').value = h.ms;
   $('hatMsOut').textContent = `${h.ms}ms`;
@@ -393,6 +529,128 @@ function flashLocked() {
   void a.offsetWidth; // restart the animation
   a.classList.add('shake');
 }
+// A command the rig turned down: hacked (the alert shakes) or the FIREWALL is up.
+function refused() {
+  if (rig.locked) flashLocked();
+  else if (rig.state.sandbox) showBanner('FIREWALL engaged: the virus is shut out. Flip FIREWALL off to let it loose.');
+}
+$('fwSwitch').addEventListener('click', () => rig.setSandbox(!rig.state.sandbox));
+
+// ---------- GUESTS: friends jack in from their own phones (guests.js) ----------
+// "Wanna edgerun?" -> INVITE: a one-time password + the guest QR. They're in when they
+// type it; DISCONNECT ends it, PWN ends it with a show on their screen.
+const host = new GuestHost(rig);
+$('guestSwitch').addEventListener('click', () => {
+  if (!host.enabled) return host.enable();
+  if (confirm('Turn GUESTS off? Everyone is disconnected and unused passwords stop working.')) host.disable();
+});
+GUEST_MINUTES.forEach((m) => {
+  const b = document.createElement('button');
+  b.textContent = `${m} MIN`;
+  b.dataset.min = m;
+  b.addEventListener('click', () => host.setMinutes(m));
+  $('guestTime').append(b);
+});
+let shownInvite = null;
+function openInvite() {
+  shownInvite = host.invite();
+  const qr = qrcode(0, 'M');
+  qr.addData(host.link);
+  qr.make();
+  $('inviteQr').innerHTML = qr.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
+  $('inviteCode').textContent = showCode(shownInvite.code);
+  tickInvite();
+  if (!$('invite').open) $('invite').showModal();
+}
+function tickInvite() {
+  if (!shownInvite || !$('invite').open) return;
+  const used = !host.invites.includes(shownInvite);
+  $('inviteLeft').textContent = used ? 'USED: they’re in. Tap NEW for the next one.'
+    : `one phone · valid ${mmss(shownInvite.until - Date.now())}`;
+  $('invite').classList.toggle('used', used);
+}
+$('inviteBtn').addEventListener('click', openInvite);
+$('inviteBtn2').addEventListener('click', openInvite);
+$('inviteNew').addEventListener('click', openInvite);
+$('guestRelay').value = host.relay;
+$('guestRelay').addEventListener('change', () => {
+  const v = $('guestRelay').value.trim() || DEFAULT_RELAY;
+  if (v === host.relay) return;
+  if (!confirm('Switch the guest relay? Everyone is disconnected and the QR changes (resend the badge).')) {
+    $('guestRelay').value = host.relay;
+    return;
+  }
+  if (!host.setRelay(v)) {
+    showBanner('The relay needs a full https:// address of an ntfy server.');
+    $('guestRelay').value = host.relay;
+  }
+});
+$('guestNewLink').addEventListener('click', () => {
+  if (confirm('Make a new guest link? Everyone is disconnected and old QR codes (the badge’s too) stop working.')) host.newLink();
+});
+$('inviteClose').addEventListener('click', () => $('invite').close());
+
+// PWN signs it with the badge's callsign.
+const callsign = () => { try { return JSON.parse(localStorage.getItem('rig-badge'))?.callsign; } catch { return null; } };
+
+const mmss = (ms) => { const t = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+function gItem(cls, who, sub, ...buttons) {
+  const row = document.createElement('div');
+  row.className = 'gitem ' + cls;
+  const w = document.createElement('span');
+  w.className = 'who';
+  w.textContent = who;
+  if (sub) { const s = document.createElement('small'); s.textContent = sub; w.append(s); }
+  row.append(w);
+  for (const [label, kind, fn] of buttons) {
+    const b = document.createElement('button');
+    b.className = kind;
+    b.textContent = label;
+    b.addEventListener('click', fn);
+    row.append(b);
+  }
+  return row;
+}
+const left = (until) => mmss(until - Date.now()) + ' left';
+function renderGuests() {
+  $('guestSwitch').setAttribute('aria-checked', String(host.enabled));
+  $('guestbar').hidden = !host.enabled;
+  segShow('guestTime', 'min', host.minutes);
+  if (!host.enabled) { $('guestList').replaceChildren(); return; }
+  const n = host.guests.size;
+  $('guestCount').textContent = n ? `${n} RUNNER${n > 1 ? 'S' : ''} JACKED IN` : 'PORT OPEN';
+  const rows = [];
+  for (const v of host.invites) {
+    const r = gItem('pending', `PASS ${showCode(v.code)}`, left(v.until), ['REVOKE', 'ghost', () => host.revokeInvite(v.code)]);
+    r.dataset.until = v.until;
+    rows.push(r);
+  }
+  for (const [g, x] of host.guests) {
+    const tag = LANGS.find((l) => l.code === x.lang)?.label || 'EN';
+    const r = gItem('', `${x.name} · ${tag}`, left(x.until),
+      ['DISCONNECT', 'ghost', () => host.kick(g)],
+      ['PWN', 'pwn', () => host.pwn(g, callsign())]);
+    r.dataset.until = x.until;
+    rows.push(r);
+  }
+  for (const q of host.queue) {
+    const name = host.guests.get(q.g)?.name || 'GUEST';
+    const r = gItem('ask', q.kind === 'up' ? `${name}: ${q.pic.caption || 'a picture'}` : `${name}: “${q.text}”`,
+      q.kind === 'up' ? 'sent a picture' : 'wants to show a word',
+      ['SHOW', 'yes', () => host.decide(q.n, true)], ['BLOCK', 'ghost', () => host.decide(q.n, false)]);
+    if (q.kind === 'up') r.prepend(picCanvas(q.pic));
+    rows.push(r);
+  }
+  $('guestList').replaceChildren(...rows);
+  tickInvite();
+}
+host.addEventListener('change', renderGuests);
+host.addEventListener('tick', () => {        // just the countdowns, so buttons don't jump under a finger
+  for (const r of $('guestList').querySelectorAll('[data-until]')) r.querySelector('small').textContent = left(+r.dataset.until);
+  tickInvite();
+});
+renderGuests();
+setupBadge({ rig, host, $, segPick, segShow, showBanner });
 
 // ---------- power ----------
 const asleep = (p) => p === POWER.STANDBY || p === POWER.OFF;
@@ -443,17 +701,17 @@ function render(s) {
     if (t.colors[1]) el.style.setProperty('--c2', hex(t.colors[1]));
   });
 
-  const showBreathe = s.set === 'alt' && s.idx.alt === BREATHE_IDX;
-  $('rbpanel').hidden = !(s.set === 'alt' && s.idx.alt === RAINBOW_IDX);
-  $('hackpanel').hidden = !(s.set === 'alt' && s.idx.alt === HACK_IDX);
   renderHackTimer(s.hackTimer);
+  $('hackNow').disabled = s.sandbox || s.hacked || s.power !== POWER.ON;
+  $('hackTimer').classList.toggle('dim', s.sandbox);
+  $('fwSwitch').setAttribute('aria-checked', String(s.sandbox));
   segShow('mute', 'muted', s.muted ? 1 : 0);
   segShow('showCmd', 'show', s.showCmd ? 1 : 0);
-  renderTune(s);
+  renderPatterns(s);
+  { const k = modeOf(s); $('tuneLink').textContent = `TUNE ${k.name.toUpperCase()} ⚙`; }
   if (document.activeElement !== $('rbSpeed')) $('rbSpeed').value = s.rainbow.speed;
   if (document.activeElement !== $('rbWidth')) $('rbWidth').value = s.rainbow.width;
   paintRainbow(s.rainbow);
-  $('breathe').hidden = !showBreathe;
   paintPair(s.pair);
   if (document.activeElement !== $('c1')) $('c1').value = hex(s.pair[0]);
   if (document.activeElement !== $('c2')) $('c2').value = hex(s.pair[1]);
@@ -489,6 +747,7 @@ chip('maskL', 'Mask L');
 chip('maskR', 'Mask R');
 chip('cap', 'Hat', () => pick(rig.cap));
 chip('bolt', 'BOLT', () => pick(rig.bolt));
+chip('badge', 'Badge', () => pick(rig.badge));
 
 for (const d of rig.devices) {
   d.addEventListener('status', (e) => {

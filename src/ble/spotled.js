@@ -555,7 +555,7 @@ function lookFramesRaw(look, s, w, h) {
         return frame((x, y) => {
           const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy);
           if (d > R + 0.5) return BLACK;
-          if (lock && Math.abs(d - R) < 0.6) return WHITE;
+          if (lock && (Math.abs(d - R) < 0.6 || (x === 21 && y === 5))) return GREEN;   // locked on
           const behind = ((a - Math.atan2(dy, dx)) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
           if (x === 21 && y === 5) return behind < 1.6 ? AMBER : scale(AMBER, 0.15);   // the contact
           if (Math.abs(d - R) < 0.5 || (Math.abs(dx) < 0.6 || Math.abs(dy) < 0.6)) return scale(AMBER, 0.18);

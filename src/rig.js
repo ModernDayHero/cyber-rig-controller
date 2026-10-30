@@ -4,15 +4,18 @@
 // show what their own tab picked.
 
 import { Clue } from './ble/clue.js';
+import { Badge } from './ble/badge.js';
 import { Bolt } from './ble/bolt.js';
 import { SpotLed } from './ble/spotled.js';
 import { BRIGHTNESS, BREATHE_IDX, DEFAULT_HACK_TIMER, DEFAULT_PAIR, DEFAULT_RAINBOW, POWER, SETS, TUNE, cmd, look, tuneOf } from './config.js';
 import { PIC_MS, TEXT_MS, indexed } from './library.js';
+import { RECIPE_KEYS, recipe } from './recipes.js';
+import { ascii } from './i18n.js';
 
 const STORE_KEY = 'rig-state-v3';
 const MSG_MS = 10000;     // how long a call / message scrolls on the hat
 // A title for the hat / BOLT / CLUE: what was typed, as one upper-case ASCII word.
-const oneWord = (s) => s.toUpperCase().replace(/[^!-~]/g, '').slice(0, 19);
+const oneWord = (s) => ascii(s).toUpperCase().replace(/[^!-~]/g, '').slice(0, 19);
 
 const DEFAULT_BOLT = {
   follow: true,                       // mirror the rig's mode
@@ -33,6 +36,10 @@ const DEFAULT_HAT = {
 const CLOCK_CHECK_MS = 15000;         // the hat only gets a new upload when the minute changes
 const WATCH_IDX = SETS.alt.modes.findIndex((m) => m.key === 'W');
 
+/** Saved mode positions, kept inside the sets (the ALT set lost HACK, so it got shorter). */
+const fitIdx = (idx = {}) => Object.fromEntries(Object.keys(SETS).map((k) =>
+  [k, idx[k] >= 0 && idx[k] < SETS[k].modes.length ? idx[k] : 0]));
+
 function load() {
   try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch { return {}; }
 }
@@ -43,12 +50,13 @@ export class Rig extends EventTarget {
     const saved = load();
     this.state = {
       set: saved.set ?? 'os',
-      idx: saved.idx ?? { os: 0, alt: 0 },
+      idx: fitIdx(saved.idx),
       pair: saved.pair ?? DEFAULT_PAIR,
       rainbow: saved.rainbow ?? DEFAULT_RAINBOW,
       hackTimer: saved.hackTimer ?? DEFAULT_HACK_TIMER,
       tunes: saved.tunes ?? {},          // only modes the user changed: key -> {bright, colors}
       muted: saved.muted ?? false,       // silences the CLUE + mask (sent on every connect)
+      sandbox: saved.sandbox ?? false,   // the virus never starts (sent on every connect)
       showCmd: saved.showCmd ?? true,    // eggs: hat / BOLT show the /command before the look
       bolt: { ...DEFAULT_BOLT, ...saved.bolt, content: { ...DEFAULT_BOLT.content, ...saved.bolt?.content } },
       hat: { ...DEFAULT_HAT, ...saved.hat },
@@ -60,13 +68,22 @@ export class Rig extends EventTarget {
     this.cap = new SpotLed();
     this.bolt = new Bolt();
     this.clue = new Clue();
-    this.devices = [this.clue, this.cap, this.bolt]; // also the Connect-all order
+    this.badge = new Badge();
+    this.devices = [this.clue, this.cap, this.bolt, this.badge]; // also the Connect-all order
 
     this.clue.addEventListener('ready', async () => {
       this.clue.send(cmd.time());           // the CLUE has no battery clock: set it
       this.clue.send(cmd.mute(this.state.muted));
+      this.clue.send(cmd.sandbox(this.state.sandbox));
       await this.clue.applyState();
       for (const k of Object.keys(this.state.tunes)) this.clue.send(this._tuneCmd(k));  // CLUE -> mask
+    });
+    // A mask side just linked: send it every recipe (it only rewrites its NVM if they changed).
+    this._mask = { L: false, R: false };
+    this.clue.addEventListener('mask', (e) => {
+      const m = e.detail, rose = (m.L && !this._mask.L) || (m.R && !this._mask.R);
+      this._mask = { ...m };
+      if (rose) this.pushRecipes();
     });
     this.cap.addEventListener('ready', async () => {
       const h = this.state.hat;
@@ -114,8 +131,8 @@ export class Rig extends EventTarget {
   }
 
   _save() {
-    const { set, idx, pair, rainbow, hackTimer, tunes, muted, showCmd, bolt, hat } = this.state;
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ set, idx, pair, rainbow, hackTimer, tunes, muted, showCmd, bolt, hat })); } catch {}
+    const { set, idx, pair, rainbow, hackTimer, tunes, muted, sandbox, showCmd, bolt, hat } = this.state;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ set, idx, pair, rainbow, hackTimer, tunes, muted, sandbox, showCmd, bolt, hat })); } catch {}
   }
 
   /** What the rig looks like right now, for the devices that follow it. */
@@ -151,7 +168,7 @@ export class Rig extends EventTarget {
     const b = this.state.bolt;
     const lk = look(this.state);
     // Standby / off always wins, so the whole rig goes dark together; a picture or word
-    // from the SAY tab takes over too.
+    // from the IMAGE tab takes over too.
     if (lk.on && lk.text) {
       this.bolt.scrollText(lk.text, lk.rgb, 12, b.brightness);
     } else if (b.follow || !lk.on || this.state.egg || this.state.hacked) {
@@ -273,6 +290,15 @@ export class Rig extends EventTarget {
     return cmd.tune(key, { bright: t.bright, colors: t.colors });
   }
 
+  /** The mask's pushed animations, a line each, paced so the CLUE's 512-byte buffer keeps up. */
+  async pushRecipes(keys = RECIPE_KEYS) {
+    for (const k of keys) {
+      if (!this.clue.connected) return;
+      await this.clue.send(cmd.recipe(k, recipe(this.state, k)));
+      await new Promise((r) => setTimeout(r, 120));
+    }
+  }
+
   /** Brightness / colours for one mode, on every device. Debounced for slider drags. */
   setTune(key, patch) {
     const cur = this.state.tunes[key] ?? { bright: TUNE[key].bright, colors: [...TUNE[key].colors] };
@@ -282,6 +308,7 @@ export class Rig extends EventTarget {
     this.dispatchEvent(new CustomEvent('change', { detail: this.state }));
     this._debounce('tune' + key, 200, () => {
       this.clue.send(this._tuneCmd(key));
+      if (RECIPE_KEYS.includes(key)) this.pushRecipes([key]);   // its colours live in the recipe
       this._update({});                    // hat / BOLT re-render if this mode is showing
     });
   }
@@ -291,6 +318,7 @@ export class Rig extends EventTarget {
     delete tunes[key];
     this.state.tunes = tunes;
     this.clue.send(this._tuneCmd(key));   // send the defaults so the CLUE / mask follow
+    if (RECIPE_KEYS.includes(key)) this.pushRecipes([key]);
     this._update({});
   }
 
@@ -314,7 +342,16 @@ export class Rig extends EventTarget {
     clearTimeout(this._msgTimer);
     this._msgTimer = setTimeout(() => { this.hatMsg = false; this.pushCap(); }, MSG_MS);
   }
-  hack() { this.clue.send(cmd.hack()); }
+  hack() {
+    if (this.state.sandbox) return false;
+    this.clue.send(cmd.hack());
+    return true;
+  }
+  /** Sandbox: the virus can't start. The CLUE purges a running one and steps off HACK. */
+  setSandbox(on) {
+    this.clue.send(cmd.sandbox(on));
+    this._update({ sandbox: on });
+  }
   setMuted(on) {
     this.clue.send(cmd.mute(on));
     this._update({ muted: on });
@@ -340,7 +377,7 @@ export class Rig extends EventTarget {
 
   /** Any other word: big text on the CLUE, pages on the hat, scrolling on the BOLT. */
   sayText(text) {
-    const t = text.toUpperCase().replace(/[^ -~]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24);
+    const t = ascii(text).toUpperCase().replace(/\s+/g, ' ').trim().slice(0, 24);
     if (!t) return;
     const rgb = [0, 229, 255];
     this.clue.send(cmd.show('t', '', 'm', rgb, '', t));

@@ -7,6 +7,8 @@ const base = process.env.BASE || '/cyber-rig-controller/';
 
 export default defineConfig({
   base,
+  // Two pages: the deck itself, and guest.html, which friends open from the invite QR.
+  build: { rollupOptions: { input: { main: 'index.html', guest: 'guest.html' } } },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',

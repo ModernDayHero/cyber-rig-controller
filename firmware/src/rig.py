@@ -18,13 +18,14 @@
 #           on STEAMWorkz OS // DARK (purple).
 #   Pad 1   tap: switch set, STEAMWorkz OS <-> ALT
 #             OS:  DARK / GLITCH / RAINFALL (blue rain + lightning) / MATRIX /
-#                  HEARTBEAT (beating heart) / NETRUN / SCANNER
-#                  screen: terminal + Octlet
+#                  HEARTBEAT (beating heart) / NETRUN (jack-in tunnel) /
+#                  SCANNER (radar, green lock-on)
+#                  screen: terminal + Octlet unless noted
 #             ALT: AUDIO VU (live meter, Octlet riding the bars; rig runs its own VU) /
 #                  RAINBOW (rainbow wave screen, rig rainbow) /
 #                  REBREATHER (rig breathes between two colors) /
-#                  HACK (releases the virus now; after a cure a hand wave re-releases it) /
-#                  WATCH (clock face) / SIGN OFF / NEON / OVERCLOCK (terminal speeds up as it moves)
+#                  WATCH (clock face) / SIGN OFF / NEON (OPEN sign) /
+#                  OVERCLOCK (heat meter, rises as the CLUE moves)
 #           A/B only ever cycle inside the current set; pad 1 is the set switch.
 #   Pad 2   color picker for REBREATHER (jumps there from any mode):
 #           tap = COLOR PICKER 1 (white LEDs + live color block, rig previews it),
@@ -52,8 +53,10 @@
 #                                   word on screen, the mask in a mode meanwhile, then
 #                                   back (see "pictures + words" below)
 #                  Q 0|1            mute: 1 silences the CLUE and the mask (sent on connect)
+#                  X 0|1            firewall: 1 = the virus never starts (no random hijacks,
+#                                   H refused); purges a running one
 #                  H  start the hack     K  purge it     ?  report everything
-#   CLUE -> phone  M <set> <i> / C r g b r g b / R sp w dir / T min max / P on|waking|blink|off /
+#   CLUE -> phone  M <set> <i> / C r g b r g b / R sp w dir / T min max / X 0|1 / P on|waking|blink|off /
 #                  V 0|1 (hacked) / L 0|1 0|1 (left / right Bluefruit links), sent on every change
 #   While hacked the phone's M/C are refused like the buttons; K still purges.
 #
@@ -99,18 +102,17 @@ SETS = {
         (b"r", "RAINFALL",   0xB040FF, "term"),   # purple/magenta/cyan rain + lightning
         (b"M", "MATRIX",     GREEN,    "term"),
         (b"h", "HEARTBEAT",  RED,      "heart"),    # red lub-dub pulse, a beating heart on screen
-        (b"n", "NETRUN",     CYAN,     "term"),     # cyan packets racing round, jacking in
-        (b"s", "SCANNER",    0xFFAA00, "term"),     # slow targeting sweep, lock-on flash
+        (b"n", "NETRUN",     CYAN,     "fx"),       # cyan packets racing round, a jack-in tunnel
+        (b"s", "SCANNER",    0xFFAA00, "fx"),       # slow targeting sweep, green lock-on on a radar
     ],
     "alt": [
         (b"A", "AUDIO VU",   0xFFC800, "vu"),
         (b"R", "RAINBOW",    None,     "rainbow"),
         (None, "REBREATHER", CYAN,     "breathe"),
-        (b"H", "HACK",       RED,      "term"),     # on demand: releases the virus
         (b"D", "WATCH",      0x39B6C0, "watch"),    # clock face; the rig runs Dark meanwhile
         (b"P", "SIGN OFF",   WHITE,    "term"),     # rig flares white, then fades out
-        (b"e", "NEON",       0xFF1496, "term"),     # pink / cyan neon sign, buzzing
-        (b"o", "OVERCLOCK",  0xFF6E00, "term"),     # amber -> white-hot, faster as you move
+        (b"e", "NEON",       0xFF1496, "fx"),       # pink / cyan neon sign, buzzing: OPEN
+        (b"o", "OVERCLOCK",  0xFF6E00, "vu"),       # amber -> white-hot; the meter follows motion
     ],
 }
 SET_NAMES = {"os": "STEAMWorkz OS", "alt": "ALT"}
@@ -308,15 +310,6 @@ VIRUS_TEXT = [
     "!! uplink REROUTED", "!! kernel {:08b}", "!! RESISTANCE IS 0x00",
 ]
 GLITCH = "#%&@$!?/\\|<>=+*"
-# The terminal modes' own lines, and every how many loops one is added.
-MODE_TEXT = {
-    b"n": (("> jack in // node 0x{:04X}", "> trace 10.0.{}.1", "> ICE probe {:08b}", "> breach {}%",
-            "> daemon.inject 0x{:04X}", "> netrun ok // {}ms"), 2),
-    b"s": (("> scanning sector {}", "> sweep {} deg", "> contact? 0x{:04X}", "> range {}m",
-            "> TARGET ACQUIRED", "> lock {:08b}"), 8),
-    b"e": (("> NEON // OPEN 24/7", "> buzz {}hz", "> tube {} ok", "> glow 0x{:04X}"), 10),
-    b"o": (("> core {}C", "> clock {}00 MHz", "> volts 1.{}", "> OVERCLOCK x{}"), 6),
-}
 
 def fill(tmpl):
     return tmpl.format(random.randint(0, 0xFFFF) if "X}" in tmpl
@@ -429,8 +422,7 @@ for _ in range(8):
 VU_W = 16
 vu_bmp = displayio.Bitmap(VU_W, 16, 5)
 vu_pal = displayio.Palette(5)
-for i, c in enumerate((0x000000, 0x00FF28, 0xFFC800, 0xFF2000, 0xFFFFFF)):
-    vu_pal[i] = c
+VU_COLS = (0x00FF28, 0xFFC800, 0xFF2000, 0xFFFFFF)     # OVERCLOCK swaps in a heat scale
 vu_grp = displayio.Group()
 vu_cells = displayio.Group(scale=15)
 vu_cells.append(displayio.TileGrid(vu_bmp, pixel_shader=vu_pal))
@@ -471,11 +463,9 @@ root.append(br_grp)
 def br_label():
     set_text(br_text[1], "#{:02X}{:02X}{:02X}>#{:02X}{:02X}{:02X}".format(*(pair[0] + pair[1])))
 
-# RAINBOW screen: diagonal stripes whose palette rolls, so the wave moves for free
+# RAINBOW screen: diagonal stripes whose palette rolls, so the wave moves for free.
+# NETRUN / SCANNER / NEON repaint the same 16x16 picture (fx_paint) to save RAM.
 rb_bmp = displayio.Bitmap(16, 16, 16)
-for y in range(16):
-    for x in range(16):
-        rb_bmp[x, y] = (x + y) % 16
 rb_pal = displayio.Palette(16)
 rb_grp = displayio.Group(scale=15)
 rb_grp.append(displayio.TileGrid(rb_bmp, pixel_shader=rb_pal))
@@ -512,6 +502,92 @@ def heart_draw(now):
     if now % 1.05 < 0.05:                    # a new beat: the reading drifts a little
         bpm = max(64, min(84, bpm + random.choice((-1, 0, 1))))
         set_text(bpm_txt[1], "{} BPM".format(bpm))
+
+# OVERCLOCK screen: the VU meter, in heat colours, driven by how hard the CLUE moves
+oc_e = 0.0
+
+def oc_level():
+    global oc_e
+    ax, ay, az = accel()
+    oc_e = max(min(1.0, abs(math.sqrt(ax * ax + ay * ay + az * az) - 9.8) / 6), oc_e * 0.97)
+    return 0.25 + 0.75 * oc_e
+
+# NETRUN / SCANNER / NEON screens: the rainbow's 16x16 picture, repainted when the mode
+# comes up and animated only by rolling its palette, so a frame costs a few palette writes.
+# fx_grp is just their label, over the picture.
+fx_text = make_text(16, 6, 3, 0xFFFFFF)
+fx_grp = fx_text[0]
+fx_grp.hidden = True
+root.append(fx_grp)
+NEON_FONT = ("111101101101111", "111101111100100", "111100110100111", "110101101101101")  # OPEN, 3x5
+CONTACT = 10              # the scanner contact's sector (pixel 11,4)
+fx_state = -1             # scanner: locked or not; neon: the letter that's out
+fx_until = 0.0
+
+def fade(c, k):
+    return (int((c >> 16) * k) << 16) | (int(((c >> 8) & 0xFF) * k) << 8) | int((c & 0xFF) * k)
+
+def tune2(d):
+    """The mode's tuned second colour, else d."""
+    tn = tunes.get(cur()[0].decode())
+    return rgb_int(tn[4:7]) if tn else d
+
+def fx_paint(k):
+    """Draw the mode's picture once into rb_bmp; fx_draw (or the rainbow) only rolls
+    the palette after this."""
+    global fx_state
+    for i in range(16):
+        rb_pal[i] = 0
+    for y in range(16):
+        for x in range(16):
+            dx, dy = x - 7.5, y - 7.5
+            if k == b"R":       # rainbow: diagonal stripes
+                v = (x + y) % 16
+            elif k == b"n":       # tunnel: 8 square rings (1-8), the diagonals as traces (9)
+                v = 9 if abs(dx) == abs(dy) > 1 else 1 + int(max(abs(dx), abs(dy)))
+            elif k == b"s":     # radar: 12 sectors (1-12), rim + crosshair (13), a contact (14)
+                d = math.sqrt(dx * dx + dy * dy)
+                v = (0 if d > 7.9 else 14 if (x, y) == (11, 4) else
+                     13 if d > 6.9 or abs(dx) < 1 or abs(dy) < 1 else
+                     1 + int(math.atan2(dy, dx) / (2 * math.pi) % 1 * 12))
+            else:               # neon: OPEN (a tube per letter, 1-4) between two tubes (5)
+                c = x // 4
+                v = (5 if y in (2, 13) and x < 15 else
+                     1 + c if 5 <= y < 10 and x % 4 < 3 and NEON_FONT[c][(y - 5) * 3 + x % 4] == "1"
+                     else 0)
+            rb_bmp[x, y] = v
+    fx_state = -1
+    fx_text[2][1] = text_color()
+    set_text(fx_text[1], "JACKING IN" if k == b"n" else "OPEN 24/7" if k == b"e" else "")
+
+def fx_draw(now):
+    global fx_state, fx_until
+    k, c = cur()[0], text_color()
+    if k == b"n":           # packets fall down the tunnel, the core flashes as they land
+        for r in range(8):
+            b = max(0.0, 1 - (r + now * 5) % 4 / 1.5)
+            rb_pal[1 + r] = 0xFFFFFF if r == 0 and b > 0.7 else fade(c, 0.06 + 0.94 * b)
+        rb_pal[9] = fade(tune2(MAGENTA), 0.3 + 0.15 * math.sin(now * 3))
+    elif k == b"s":         # the beam sweeps with a fading tail; every 4 s it locks on, green
+        a = now * 0.3 % 1 * 12
+        lock = now % 4.0 < 0.3
+        for i in range(12):
+            b = (a - i) % 12
+            rb_pal[1 + i] = fade(c, (1 - b / 4) ** 2) if b < 4 else 0
+        rb_pal[13] = GREEN if lock else fade(c, 0.2)
+        rb_pal[14] = GREEN if lock else c if (a - CONTACT) % 12 < 2 else fade(c, 0.15)
+        if lock != fx_state:
+            fx_state = lock
+            fx_text[2][1] = GREEN if lock else c
+            set_text(fx_text[1], "TARGET LOCKED" if lock else "SCANNING")
+    else:                   # neon: buzzing, now and then one letter's tube dies for a moment
+        if now > fx_until:
+            fx_state = random.randint(1, 4) if random.random() < 0.3 else 0
+            fx_until = now + (random.uniform(0.1, 0.5) if fx_state else random.uniform(0.8, 3))
+        buzz = random.uniform(0.8, 1.0)
+        for i in range(1, 5):
+            rb_pal[i] = fade(c, 0.08 if i == fx_state else buzz)
+        rb_pal[5] = fade(tune2(CYAN), buzz)
 
 # WATCH screen: the Octlet as a clock. Body + eye in the middle, legs as the hands.
 W_CX, W_CY = 120, 112
@@ -781,6 +857,7 @@ def report():
         ("L", "{} {}".format(int(side_up("L")), int(side_up("R")))),
         ("R", "{} {} {}".format(*rb)),
         ("T", "{} {}".format(*hack_range)),
+        ("X", "1" if sandbox else "0"),
     )
     for k, v in st:
         if last_rep.get(k) != v:
@@ -804,7 +881,7 @@ def phone_read():
         except Exception:
             phone_say("E bad")
         report()                           # answer at once, don't wait for the timer
-    if len(phone_buf) > 128:           # junk without newlines: drop it
+    if len(phone_buf) > 160:           # junk without newlines: drop it (recipe lines run ~120)
         phone_buf = b""
 
 def phone_cmd(w):
@@ -815,9 +892,14 @@ def phone_cmd(w):
         last_rep.clear()
     elif c == "Q":                         # mute works asleep too
         set_mute(w[1] == "1")
+    elif c == "X":                         # so does the sandbox
+        set_sandbox(w[1] == "1")
     elif c == "J":                         # picture palette (data lines: never refused)
         for i, v in enumerate(w[2:]):
             pic_pal[int(w[1]) + i] = int(v, 16)
+    elif c == "L":                         # a mask animation (recipe): straight on to both sides
+        d = bytes(int(w[2][i:i + 2], 16) for i in range(0, len(w[2]), 2))
+        send(b"L" + bytes((len(d) + 1,)) + w[1].encode() + d)
     elif c == "I":                         # one row of the picture
         r, row = int(w[1]), w[2]
         for x in range(16):
@@ -845,7 +927,10 @@ def phone_cmd(w):
         denied()                           # hacked: same lockout as the buttons
         phone_say("E locked")
     elif c == "H":
-        hijack()
+        if sandbox:
+            phone_say("E sandbox")
+        else:
+            hijack()
     elif c == "M":
         st, i = w[1], int(w[2]) % len(SETS[w[1]])
         idx[st] = i
@@ -863,6 +948,8 @@ def phone_cmd(w):
             send(b"Z" + w[1].encode() + v)
             if mode == "idle":
                 apply_theme()                  # CLUE screen picks up the new colour
+                if cur()[3] in ("vu", "fx", "heart"):
+                    show_screen()              # these colour their own pictures
     elif c == "T":
         lo = max(0, min(3600, int(w[1])))
         hi = max(lo, min(3600, int(w[2])))
@@ -928,6 +1015,7 @@ infect_t = 0.0
 startle_until = 0.0
 hack_range = [180, 300]   # seconds between random hijacks (3-5 min); [0, 0] = off. Phone: T
 next_hack = 0.0
+sandbox = False           # phone X (FIREWALL): the virus never starts (not kept: the phone resends it)
 scanning = False
 scan_rgb = (0, 0, 0)
 picking = 0               # 0 = off, 1 / 2 = which rebreather color the picker sets
@@ -1136,16 +1224,23 @@ def apply_theme():
 def show_screen():
     scr = cur()[3]
     term.hidden = scr != "term"
-    icon.hidden = scr in ("breathe", "watch", "heart")
+    icon.hidden = scr in ("breathe", "watch", "heart", "fx")
     watch_grp.hidden = scr != "watch"
     heart_grp.hidden = scr != "heart"
+    fx_grp.hidden = scr != "fx"
+    if scr in ("fx", "rainbow"):
+        fx_paint(cur()[0])             # they share one picture
+    if scr == "vu":
+        heat = (text_color(), 0xFFB040, 0xFFF0C8, 0xFFFFFF)
+        for i, c in enumerate(heat if cur()[0] == b"o" else VU_COLS):
+            vu_pal[i + 1] = c
     if scr == "heart":
         heart_pal[0] = bpm_txt[2][1] = text_color()     # tuned pulse colour, else red
         set_text(bpm_txt[1], "{} BPM".format(bpm))
     if scr == "watch":
         watch_update(force=True)
     vu_grp.hidden = scr != "vu"
-    rb_grp.hidden = scr != "rainbow"
+    rb_grp.hidden = scr not in ("rainbow", "fx")
     br_grp.hidden = scr != "breathe"
     if scr == "breathe":
         br_label()
@@ -1186,6 +1281,9 @@ def go_virus():
     global mode, phase_t, infect_t
     if cur()[3] != "term":
         return
+    if sandbox:
+        term_push("> FIREWALL // octlet.exe blocked", CYAN)
+        return
     mode = "infect"
     phase_t = infect_t = time.monotonic()
     term_push("!! UNKNOWN PROCESS: octlet.exe", RED)
@@ -1197,10 +1295,17 @@ def denied():
     term_push("!! INPUT LOCKED // shake or wave", RED)
     term_glitch(2)
 
+def set_sandbox(on):
+    """Phone X: shut the virus out. A running one is purged."""
+    global sandbox
+    sandbox = on
+    if on and power == "on" and mode != "idle":
+        change()
+
 def schedule_hack():
     global next_hack
     if not hack_range[1]:
-        next_hack = 1e12                   # off: only the HACK mode / phone H start it
+        next_hack = 1e12                   # off: only the phone's H (HACK IT ALL) starts it
     else:
         next_hack = time.monotonic() + random.uniform(hack_range[0], hack_range[1])
 
@@ -1242,8 +1347,6 @@ def change(new_set=None, d=0):
     if new_set:
         term_push("> {} loaded".format(SET_NAMES[cur_set]), text_color())
     mode_line()
-    if cur()[1] == "HACK":
-        go_virus()              # the HACK mode is the virus, on demand
 
 def go_standby():
     global power, power_t
@@ -1253,7 +1356,7 @@ def go_standby():
     power, power_t = "blink", time.monotonic()
     send(b"W")                  # rig blinks white, then off
     term.hidden = icon.hidden = False
-    vu_grp.hidden = br_grp.hidden = rb_grp.hidden = heart_grp.hidden = True
+    vu_grp.hidden = br_grp.hidden = rb_grp.hidden = heart_grp.hidden = fx_grp.hidden = True
     icon.scale, icon.x, icon.y = 1, 240 - 68, 4
     term_color(WHITE)
     tint(WHITE)
@@ -1270,7 +1373,7 @@ def go_waking():
     power, power_t = "waking", time.monotonic()
     cur_set, idx["os"], locked = "os", 0, None
     term.hidden = icon.hidden = False
-    vu_grp.hidden = br_grp.hidden = rb_grp.hidden = heart_grp.hidden = True
+    vu_grp.hidden = br_grp.hidden = rb_grp.hidden = heart_grp.hidden = fx_grp.hidden = True
     icon.scale, icon.x, icon.y = 1, 240 - 68, 4
     term_color(WHITE)
     tint(WHITE)
@@ -1404,17 +1507,14 @@ while True:
 
     scr = cur()[3]
 
-    # hand toward the sensor: Octlet startles, and the virus may take its chance
+    # hand toward the sensor: Octlet startles
     waved = hand_approached()
     if waved and mode == "idle" and scr == "term":
-        if cur()[1] == "HACK":
-            go_virus()                     # wave to set it off again
-        else:
-            startle_until = now + 0.8
-            term_push("> proximity alert: something is watching", CYAN)
+        startle_until = now + 0.8
+        term_push("> proximity alert: something is watching", CYAN)
 
     # random hijack every 3-5 min, unless something's already going on
-    if now > next_hack and mode == "idle" and not picking:
+    if now > next_hack and mode == "idle" and not picking and not sandbox:
         hijack()
 
     # motion feeds the swarm; shake / snap-clap / hand held over = cure
@@ -1472,7 +1572,7 @@ while True:
 
     if mode == "idle":
         if scr == "vu":
-            vu_draw(vu_level())
+            vu_draw(oc_level() if cur()[0] == b"o" else vu_level())
             # surf: sway side to side across the meter, riding the bar heights under it
             sx = 88 + 84 * math.sin(now * SURF_SPEED)
             pos = min(7.0, max(0.0, (sx + 32 - 7.5) / 30))   # bar k is centered at k*30+7.5 px
@@ -1502,6 +1602,8 @@ while True:
             br_pal[0] = rgb_int([a[k] + (b[k] - a[k]) * w for k in range(3)])
         elif scr == "heart":
             heart_draw(now)
+        elif scr == "fx":
+            fx_draw(now)
         else:
             if cur()[2] is None and not locked and t % 2 == 0:
                 apply_theme()              # rainbow: keep the hue rolling
@@ -1520,14 +1622,6 @@ while True:
             elif cur()[0] == b"M" and not locked:
                 if t % 3 == 0:
                     term_push(rain_line(), text_color(), down=True)
-            elif cur()[0] in MODE_TEXT and not locked:
-                lines, every = MODE_TEXT[cur()[0]]
-                if cur()[0] == b"o":       # overclock: the more the CLUE moves, the faster
-                    ax, ay, az = accel()
-                    every = max(1, every - int(abs(math.sqrt(ax * ax + ay * ay + az * az) - 9.8)))
-                if t % every == 0:
-                    c = random.choice((0xFF1496, CYAN)) if cur()[0] == b"e" else text_color()
-                    term_push(fill(random.choice(lines)), c)
             elif t % 6 == 0:
                 term_push(fill(random.choice(IDLE_TEXT)), text_color())
             if now < startle_until:

@@ -21,6 +21,35 @@
 
       <section class="status" id="status" aria-label="Device status"></section>
 
+      <section class="switches" aria-label="Rig defences">
+        <button class="switch fw" id="fwSwitch" role="switch" aria-checked="false">
+          <span class="track"><span class="sw-knob"></span></span><span class="sw-label">FIREWALL</span>
+        </button>
+        <button class="switch guest" id="guestSwitch" role="switch" aria-checked="false">
+          <span class="track"><span class="sw-knob"></span></span><span class="sw-label">GUESTS</span>
+        </button>
+      </section>
+
+      <section class="guestbar" id="guestbar" hidden aria-label="Guests">
+        <div class="row">
+          <span class="label" id="guestCount">NO GUESTS</span>
+          <button class="ghost go" id="inviteBtn">INVITE</button>
+        </div>
+        <div class="glist" id="guestList"></div>
+      </section>
+
+      <dialog class="invite" id="invite">
+        <p class="invite-head">WANNA EDGERUN?</p>
+        <div class="qr" id="inviteQr"></div>
+        <span class="label">PASSWORD</span>
+        <p class="invite-code" id="inviteCode">---</p>
+        <span class="hint" id="inviteLeft"></span>
+        <div class="seg">
+          <button id="inviteNew">NEW</button>
+          <button id="inviteClose">CLOSE</button>
+        </div>
+      </dialog>
+
       <p class="banner" id="banner" hidden></p>
 
       <section class="alert" id="alert" hidden>
@@ -35,7 +64,9 @@
         <button data-view="rig">RIG</button>
         <button data-view="bolt">BOLT</button>
         <button data-view="hat">HAT</button>
-        <button data-view="say">SAY</button>
+        <button data-view="badge">BADGE</button>
+        <button data-view="image">IMAGE</button>
+        <button data-view="set" aria-label="Settings">SET</button>
       </nav>
 
       <!-- ================= RIG ================= -->
@@ -44,15 +75,8 @@
 
         <section class="modes" id="modes" aria-label="Modes"></section>
 
-        <section class="panel tune" id="tunepanel" hidden aria-label="Tune this mode">
-          <div class="row">
-            <span class="label" id="tuneName">TUNE</span>
-            <input type="range" id="tuneBright" min="10" max="100" step="5" />
-            <output id="tuneBrightOut">100%</output>
-          </div>
-          <div class="tunecolors" id="tuneColors"></div>
-          <button class="ghost reset" id="tuneReset">RESET TO DEFAULT</button>
-        </section>
+        <button class="ghost tunelink" id="tuneLink">TUNE THIS PATTERN ⚙</button>
+
 
         <section class="breathe" id="breathe" hidden aria-label="Rebreather colors">
           <div class="preview" id="preview"></div>
@@ -88,29 +112,262 @@
           </div>
         </section>
 
-        <section class="panel" id="hackpanel" hidden aria-label="Hack timer">
-          <div class="row">
-            <span class="label">AUTO</span>
-            <div class="seg seg5" id="hackTimer"></div>
-          </div>
-          <span class="hint" id="hackTimerHint">every 3–5 min</span>
-        </section>
-
       </div>
 
-      <!-- ================= SAY ================= -->
-      <div class="view" id="view-say" hidden>
+      <!-- ================= BADGE ================= -->
+      <div class="view" id="view-badge" hidden>
+        <div class="row">
+          <span class="label">SHOW</span>
+          <div class="seg" id="badgeKind">
+            <button data-kind="login">LOGIN QR</button>
+            <button data-kind="photo">PHOTO</button>
+          </div>
+        </div>
+
+        <canvas class="pix badge-pix" id="badgePreview" width="540" height="960" aria-label="Badge preview"></canvas>
+
+        <section class="panel" data-pane="login">
+          <div class="row">
+            <span class="label">CALLSIGN</span>
+            <input class="text" id="badgeCall" maxlength="16" />
+          </div>
+          <span class="hint">The QR opens the guest page (GUESTS). It stays valid until SET → GUESTS → NEW LINK.</span>
+        </section>
+
+        <section class="panel" data-pane="photo" hidden>
+          <label class="file">
+            <input type="file" id="badgeFile" accept="image/png,image/jpeg,image/webp,image/gif" />
+            <span>PICK A PHOTO</span>
+          </label>
+          <span class="hint">Drag the preview to frame it.</span>
+          <div class="row">
+            <span class="label">ZOOM</span>
+            <input type="range" id="badgeZoom" min="1" max="3" step="0.05" />
+            <output id="badgeZoomOut">100%</output>
+          </div>
+          <div class="row">
+            <span class="label">CONTRAST</span>
+            <input type="range" id="badgeContrast" min="0.6" max="2" step="0.05" />
+            <output id="badgeContrastOut">120%</output>
+          </div>
+          <div class="row">
+            <span class="label">BRIGHT</span>
+            <input type="range" id="badgeBright" min="-80" max="80" step="5" />
+            <output id="badgeBrightOut">0</output>
+          </div>
+          <div class="row">
+            <span class="label">DITHER</span>
+            <div class="seg" id="badgeDither">
+              <button data-dither="0">OFF</button>
+              <button data-dither="1">ON</button>
+            </div>
+          </div>
+        </section>
+
+        <div class="row">
+          <span class="label">HANGS</span>
+          <div class="seg" id="badgeTurn">
+            <button data-turn="cw">USB DOWN</button>
+            <button data-turn="ccw">USB UP</button>
+          </div>
+        </div>
+        <span class="hint" id="badgeInfo">Not linked: tap the Badge chip at the top.</span>
+        <div class="seg badge-actions">
+          <button class="send" id="badgeSend">SEND TO BADGE<span class="bar" id="badgeBar"></span></button>
+          <button id="badgeClear">CLEAR</button>
+        </div>
+      </div>
+
+      <!-- ================= SETTINGS ================= -->
+      <div class="view" id="view-set" hidden>
+        <p class="fold-head">PATTERNS</p>
+        <div class="folds" id="patternFolds"></div>
+
+        <p class="fold-head">RIG</p>
+        <details class="fold" data-fold="virus">
+          <summary>VIRUS</summary>
+          <div class="fold-body" id="virusBody">
+            <div class="row">
+              <button class="ghost send danger" id="hackNow">HACK IT ALL</button>
+            </div>
+            <div class="row">
+              <span class="label">AUTO</span>
+              <div class="seg seg5" id="hackTimer"></div>
+            </div>
+            <span class="hint" id="hackTimerHint">every 3–5 min</span>
+          </div>
+        </details>
+        <details class="fold" data-fold="guests">
+          <summary>GUESTS</summary>
+          <div class="fold-body">
+            <div class="row">
+              <span class="label">TIME</span>
+              <div class="seg seg4" id="guestTime"></div>
+            </div>
+
+            <div class="seg">
+              <button id="inviteBtn2">NEW INVITE</button>
+              <button id="guestNewLink">NEW LINK</button>
+            </div>
+            <div class="row">
+              <span class="label">RELAY</span>
+              <input class="text" id="guestRelay" type="url" inputmode="url" spellcheck="false" placeholder="https://ntfy.sh" />
+            </div>
+            <span class="hint">GUESTS (top of the screen) opens the port; each guest gets this long from typing their password. The link stays the same (the badge's QR too) until NEW LINK, which also kicks everyone. RELAY: any ntfy server, e.g. your own on the NAS.</span>
+          </div>
+        </details>
+        <details class="fold" data-fold="sound">
+          <summary>SOUND + TITLES</summary>
+          <div class="fold-body">
+            <div class="row">
+              <span class="label">SOUND</span>
+              <div class="seg" id="mute">
+                <button data-muted="0">ON</button>
+                <button data-muted="1">MUTE</button>
+              </div>
+            </div>
+            <div class="row">
+              <span class="label">TITLE</span>
+              <div class="seg" id="showCmd">
+                <button data-show="1">SHOW WORD</button>
+                <button data-show="0">SKIP</button>
+              </div>
+            </div>
+          </div>
+        </details>
+        <details class="fold" data-fold="bolt">
+          <summary>BOLT</summary>
+          <div class="fold-body">
+            <div class="row">
+              <span class="label">SHAKE</span>
+              <div class="seg" id="boltShake">
+                <button data-shake="1">PURGES HACK</button>
+                <button data-shake="0">IGNORED</button>
+              </div>
+            </div>
+            <div class="row">
+              <span class="label">SENSE</span>
+              <input type="range" id="boltSense" min="1" max="10" step="1" />
+              <output id="boltSenseOut">5</output>
+            </div>
+            <div class="row">
+              <span class="label">BRIGHT</span>
+              <input type="range" id="boltBright" min="10" max="100" step="5" />
+              <output id="boltBrightOut">35%</output>
+            </div>
+          </div>
+        </details>
+        <details class="fold" data-fold="hat">
+          <summary>HAT</summary>
+          <div class="fold-body">
+            <div class="row">
+              <span class="label">BOLTS</span>
+              <div class="seg seg4" id="hatLightning">
+                <button data-lightning="0">OFF</button>
+                <button data-lightning="1">LOW</button>
+                <button data-lightning="2">MED</button>
+                <button data-lightning="3">STORM</button>
+              </div>
+            </div>
+            <span class="hint">Rainfall lightning: 0–3 strikes per 2.2 s loop</span>
+            <div class="row">
+              <span class="label">FLIP</span>
+              <div class="seg seg4" id="hatScreen">
+                <button data-screen="0">NORMAL</button>
+                <button data-screen="1">UPSIDE</button>
+                <button data-screen="2">MIRROR</button>
+                <button data-screen="3">BOTH</button>
+              </div>
+            </div>
+            <div class="row">
+              <span class="label">BRIGHT</span>
+              <input type="range" id="hatBright" min="10" max="100" step="5" />
+              <output id="hatBrightOut">35%</output>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <!-- ================= IMAGE ================= -->
+      <div class="view" id="view-image" hidden>
         <section class="panel" aria-label="Say something">
           <div class="row">
             <input class="text" id="alertText" maxlength="24" placeholder="type a word, or /command" enterkeyhint="send" />
             <button class="ghost go" id="sayGo">SHOW</button>
           </div>
-          <span class="hint">A picture word (boo, bat, skull…) shows its picture on the CLUE, hat and BOLT; any other word shows as text. /hack /purge and /matrix-style mode names work too.</span>
+          <span class="hint">A picture word (boo, bat, skull… or one you saved) shows its picture on the CLUE, hat and BOLT; any other word shows as text. /hack /purge and /matrix-style mode names work too.</span>
+        </section>
+
+        <section class="panel" id="picNew" aria-label="New picture for the CLUE">
+          <span class="label">NEW PICTURE</span>
+          <div class="imgrow">
+            <canvas class="pix pic-pix" id="picPreview" width="16" height="16"></canvas>
+            <div class="imgctl">
+              <label class="file">
+                <input type="file" id="picFile" accept="image/png,image/jpeg,image/gif,image/webp" />
+                <span>UPLOAD PICTURE</span>
+              </label>
+              <div class="seg seg3" id="picFit">
+                <button data-fit="contain">FIT</button>
+                <button data-fit="cover">FILL</button>
+                <button data-fit="stretch">STRETCH</button>
+              </div>
+              <span class="hint" id="picInfo">16×16, up to 15 colours. See-through PNG = no box; drawn at 16, 32, 64… stays crisp.</span>
+            </div>
+          </div>
+          <div class="row">
+            <span class="label">NAME</span>
+            <input class="text" id="picName" maxlength="16" placeholder="the word that shows it" />
+          </div>
+          <div class="row">
+            <span class="label">CAPTION</span>
+            <input class="text" id="picCaption" maxlength="20" placeholder="under it on the CLUE" />
+          </div>
+          <div class="row">
+            <span class="label">MASK</span>
+            <select class="select" id="picMask"></select>
+          </div>
+          <div class="seg">
+            <button id="picShow" disabled>SHOW</button>
+            <button id="picSave" disabled>SAVE TO LIBRARY</button>
+          </div>
         </section>
 
         <section class="panel" aria-label="Picture library">
           <span class="label">PICTURES</span>
           <div class="pics" id="picGrid"></div>
+        </section>
+
+        <section class="panel" id="hatOwn" aria-label="Hat image">
+          <span class="label">HAT IMAGE</span>
+          <canvas class="pix hat-pix" id="hatPreview" width="32" height="16"></canvas>
+          <label class="file">
+            <input type="file" id="hatFile" accept="image/png,image/jpeg,image/gif,image/webp" />
+            <span>UPLOAD PNG / JPEG / GIF</span>
+          </label>
+          <span class="hint" id="hatInfo">32×16, 256 colours, up to 20 frames</span>
+          <div class="seg seg3" id="hatFit">
+            <button data-fit="contain">FIT</button>
+            <button data-fit="cover">FILL</button>
+            <button data-fit="stretch">STRETCH</button>
+          </div>
+          <div class="row">
+            <span class="label">DITHER</span>
+            <div class="seg" id="hatDither">
+              <button data-dither="0">OFF</button>
+              <button data-dither="1">ON</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="label">EFFECT</span>
+            <select class="select" id="hatEffect"></select>
+          </div>
+          <div class="row">
+            <span class="label">FRAME</span>
+            <input type="range" id="hatMs" min="40" max="2000" step="20" />
+            <output id="hatMsOut">200ms</output>
+          </div>
+          <button class="ghost send" id="hatSend" disabled>SEND TO HAT<span class="bar" id="hatBar"></span></button>
         </section>
 
         <section class="panel" id="alertpanel" aria-label="Incoming call or message">
@@ -122,20 +379,6 @@
             </div>
           </div>
           <span class="hint">Rings the rig. The text box is the caller or the message.</span>
-          <div class="row">
-            <span class="label">SOUND</span>
-            <div class="seg" id="mute">
-              <button data-muted="0">ON</button>
-              <button data-muted="1">MUTE</button>
-            </div>
-          </div>
-          <div class="row">
-            <span class="label">TITLE</span>
-            <div class="seg" id="showCmd">
-              <button data-show="1">SHOW WORD</button>
-              <button data-show="0">SKIP</button>
-            </div>
-          </div>
         </section>
       </div>
 
@@ -231,23 +474,6 @@
           </div>
         </section>
 
-        <div class="row">
-          <span class="label">SHAKE</span>
-          <div class="seg" id="boltShake">
-            <button data-shake="1">PURGES HACK</button>
-            <button data-shake="0">IGNORED</button>
-          </div>
-        </div>
-        <div class="row">
-          <span class="label">SENSE</span>
-          <input type="range" id="boltSense" min="1" max="10" step="1" />
-          <output id="boltSenseOut">5</output>
-        </div>
-        <div class="row">
-          <span class="label">BRIGHT</span>
-          <input type="range" id="boltBright" min="10" max="100" step="5" />
-          <output id="boltBrightOut">35%</output>
-        </div>
       </div>
 
       <!-- ================= HAT ================= -->
@@ -260,6 +486,7 @@
             <button data-show="clock">CLOCK</button>
           </div>
         </div>
+        <span class="hint" id="hatOwnHint">OWN IMAGE shows the last image sent from the IMAGE tab.</span>
 
         <section class="panel" id="hatClock" hidden aria-label="Hat clock">
           <div class="row">
@@ -272,61 +499,7 @@
           <span class="hint">CLOCK is the rig's WATCH mode: the CLUE's clock face and the hat's clock together. Updates when the minute changes; calls, messages, pictures and the virus still cut in.</span>
         </section>
 
-        <section class="panel" id="hatOwn">
-          <canvas class="pix hat-pix" id="hatPreview" width="32" height="16"></canvas>
-          <label class="file">
-            <input type="file" id="hatFile" accept="image/png,image/jpeg,image/gif,image/webp" />
-            <span>UPLOAD PNG / JPEG / GIF</span>
-          </label>
-          <span class="hint" id="hatInfo">32×16, 256 colours, up to 20 frames</span>
-          <div class="seg seg3" id="hatFit">
-            <button data-fit="contain">FIT</button>
-            <button data-fit="cover">FILL</button>
-            <button data-fit="stretch">STRETCH</button>
-          </div>
-          <div class="row">
-            <span class="label">DITHER</span>
-            <div class="seg" id="hatDither">
-              <button data-dither="0">OFF</button>
-              <button data-dither="1">ON</button>
-            </div>
-          </div>
-          <div class="row">
-            <span class="label">EFFECT</span>
-            <select class="select" id="hatEffect"></select>
-          </div>
-          <div class="row">
-            <span class="label">FRAME</span>
-            <input type="range" id="hatMs" min="40" max="2000" step="20" />
-            <output id="hatMsOut">200ms</output>
-          </div>
-          <button class="ghost send" id="hatSend" disabled>SEND TO HAT<span class="bar" id="hatBar"></span></button>
-        </section>
 
-        <div class="row">
-          <span class="label">BOLTS</span>
-          <div class="seg seg4" id="hatLightning">
-            <button data-lightning="0">OFF</button>
-            <button data-lightning="1">LOW</button>
-            <button data-lightning="2">MED</button>
-            <button data-lightning="3">STORM</button>
-          </div>
-        </div>
-        <span class="hint">Rainfall lightning: 0–3 strikes per 2.2 s loop</span>
-        <div class="row">
-          <span class="label">FLIP</span>
-          <div class="seg seg4" id="hatScreen">
-            <button data-screen="0">NORMAL</button>
-            <button data-screen="1">UPSIDE</button>
-            <button data-screen="2">MIRROR</button>
-            <button data-screen="3">BOTH</button>
-          </div>
-        </div>
-        <div class="row">
-          <span class="label">BRIGHT</span>
-          <input type="range" id="hatBright" min="10" max="100" step="5" />
-          <output id="hatBrightOut">35%</output>
-        </div>
       </div>
 
       <footer class="bottom">
