@@ -574,17 +574,20 @@ function tickInvite() {
 $('inviteBtn').addEventListener('click', openInvite);
 $('inviteBtn2').addEventListener('click', openInvite);
 $('inviteNew').addEventListener('click', openInvite);
+segPick('guestGate', 'gate', (v) => host.setGate(v));
 $('guestRelay').value = host.relay;
 $('guestRelay').addEventListener('change', () => {
   const v = $('guestRelay').value.trim() || DEFAULT_RELAY;
   if (v === host.relay) return;
   if (!confirm('Switch the guest relay? Everyone is disconnected and the QR changes (resend the badge).')) {
-    $('guestRelay').value = host.relay;
+    segPick('guestGate', 'gate', (v) => host.setGate(v));
+$('guestRelay').value = host.relay;
     return;
   }
   if (!host.setRelay(v)) {
     showBanner('The relay needs a full https:// address of an ntfy server.');
-    $('guestRelay').value = host.relay;
+    segPick('guestGate', 'gate', (v) => host.setGate(v));
+$('guestRelay').value = host.relay;
   }
 });
 $('guestNewLink').addEventListener('click', () => {
@@ -618,6 +621,7 @@ function renderGuests() {
   $('guestSwitch').setAttribute('aria-checked', String(host.enabled));
   $('guestbar').hidden = !host.enabled;
   segShow('guestTime', 'min', host.minutes);
+  segShow('guestGate', 'gate', host.gate);
   if (!host.enabled) { $('guestList').replaceChildren(); return; }
   const n = host.guests.size;
   $('guestCount').textContent = n ? `${n} RUNNER${n > 1 ? 'S' : ''} JACKED IN` : 'PORT OPEN';
@@ -629,14 +633,20 @@ function renderGuests() {
   }
   for (const [g, x] of host.guests) {
     const tag = LANGS.find((l) => l.code === x.lang)?.label || 'EN';
-    const r = gItem(x.full ? 'full' : '', `${x.name} · ${tag}${x.full ? ' · FULL' : ''}`, left(x.until),
-      ['DISCONNECT', 'ghost', () => host.kick(g)],
+    const r = gItem(x.full ? 'full' : '', `${x.name} · ${tag}${x.full ? ' · FULL' : ''}${x.away ? ' · AWAY' : ''}`, left(x.until),
+      ...(x.full ? [] : [['FULL', 'yes', () => host.grant(g)]]),
+      ['KICK', 'ghost', () => host.kick(g)],
       ['PWN', 'pwn', () => host.pwn(g, callsign())]);
     r.dataset.until = x.until;
     rows.push(r);
   }
   for (const q of host.queue) {
     const name = host.guests.get(q.g)?.name || 'GUEST';
+    if (q.kind === 'skip') {
+      rows.push(gItem('ask', `${name}: skip the game?`, 'wants FULL ACCESS without playing DEBUG',
+        ['GRANT', 'yes', () => host.decide(q.n, true)], ['NO', 'ghost', () => host.decide(q.n, false)]));
+      continue;
+    }
     const r = gItem('ask', q.kind === 'up' ? `${name}: ${q.pic.caption || 'a picture'}` : `${name}: “${q.text}”`,
       q.kind === 'up' ? 'sent a picture' : 'wants to show a word',
       ['SHOW', 'yes', () => host.decide(q.n, true)], ['BLOCK', 'ghost', () => host.decide(q.n, false)]);

@@ -11,7 +11,7 @@ const MIRROR = 1, BURST = 2, CUT = 4, BUZZ = 8, MOTION = 16, FLASH = 32, OVER = 
 
 const MAG = [255, 43, 214], CYAN = [0, 229, 255], RED = [255, 30, 30], GREEN = [34, 255, 102], WHITE = [255, 255, 255];
 const GHOST = [150, 160, 200], ORANGE = [255, 80, 0], CANDLE = [255, 170, 20], BLOOD = [200, 0, 10];
-const FRANK = [60, 255, 40], SEA = [0, 60, 255], SEA2 = [0, 200, 200];
+const FRANK = [60, 255, 40], SEA = [0, 60, 255], SEA2 = [0, 200, 200], BUG = [255, 45, 202];
 
 // One layer. `speed`, `p1`, `p2` are the raw bytes; the helpers below take real units.
 const layer = (shape, { flags = 0, speed = 0, p1 = 0, p2 = 0, lo = 0, hi = 1, gamma = 1, a = WHITE, b = WHITE }) =>
@@ -78,6 +78,11 @@ const RECIPES = {
   ],
   u: () => [strobe({ hz: 3, on: 0.3, lo: 0.06, a: RED, b: MAG, flags: USE_B })],   // /middle
   c: () => [strobe({ hz: 8, on: 0.5, lo: 0.12, a: MAG })],   // censored
+  // DEBUG (a guest playing Byte vs BUG.EXE): the bug hunting round a dim cyan field,
+  // a white flash for each hit, a red glitch when it eats an Octlet.
+  g: () => [fill(CYAN, 0.1), chase({ turns: 0.45, tail: 3, a: BUG, flags: MIRROR })],
+  w: () => [fill(WHITE, 1)],
+  y: () => [fill(RED, 0.45, { flags: CUT }), sparkle(0.5, RED, { flags: BURST | OVER })],
 };
 export const RECIPE_KEYS = Object.keys(RECIPES);
 

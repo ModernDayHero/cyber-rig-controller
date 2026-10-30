@@ -9,6 +9,11 @@
 //             SHOW / BLOCK here); the rig shows BUG FIXED + their time; a hacked rig is purged
 //     lose -> BUG.EXE escapes: into the rig (the virus, at most once a minute, never through
 //             the FIREWALL) or back at them (a PWN that doesn't kick them; they can play again)
+//   A guest's handle + invite is their certificate until their time runs out, KICK or PWN:
+//   LEAVE (or a closed tab, lost signal) only marks them away, and their phone can come
+//   back on its own with the same token, access and all.
+//   skip: GET TO THE GOODZ (no game) -> GRANT / NO here. FULL (the guest list) grants it any
+//   time, and ACCESS = FULL FROM START (gate 'open') lets everyone in with full access.
 //
 // The link is ntfy.sh (no server of our own): guests post to the session topic, this app
 // listens to it (EventSource) and answers each guest on <topic>-<guest id>; rig news for
@@ -81,6 +86,7 @@ export class GuestHost extends EventTarget {
     this._pausedUntil = 0;
     this._breachAt = 0;
     this.board = saved.board || [];  // fastest DEBUG wins: { name, ms, saved }
+    this.gate = saved.gate === 'open' ? 'open' : 'game';   // 'game': play (or ask) for FULL
     if (saved.open) this.enable();
 
     // Firewall / virus news for every guest (their HACK IT ALL button follows it).
@@ -103,8 +109,8 @@ export class GuestHost extends EventTarget {
   }
 
   _save() {
-    const { topic, relay, open, minutes, invites, board } = this;
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ topic, relay, open, minutes, invites, board, guests: [...this.guests] })); } catch {}
+    const { topic, relay, open, minutes, invites, board, gate } = this;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ topic, relay, open, minutes, invites, board, gate, guests: [...this.guests] })); } catch {}
   }
   _changed() {
     this._save();
@@ -176,6 +182,13 @@ export class GuestHost extends EventTarget {
     return true;
   }
 
+  /** ACCESS: 'game' (play DEBUG, or ask to skip) or 'open' (FULL ACCESS from the start). */
+  setGate(gate) {
+    this.gate = gate === 'open' ? 'open' : 'game';
+    if (this.gate === 'open') for (const g of this.guests.keys()) this.grant(g);
+    this._changed();
+  }
+
   setMinutes(m) {
     this.minutes = m;
     this._changed();
@@ -202,8 +215,18 @@ export class GuestHost extends EventTarget {
     const x = this.guests.get(m.g);
     if (m.t === 'join') return this._join(m.g, x, m);
     if (!x || m.k !== x.token) return;          // not let in (or not them): ignored
-    if (m.t === 'bye') return this.kick(m.g, 'left');
+    if (m.t === 'bye') {                         // LEAVE: away, the certificate still good
+      x.away = true;
+      return this._changed();
+    }
+    if (x.away) { x.away = false; this._changed(); }
     if (m.t === 'game') return this._game(m.g, x, m);
+    if (m.t === 'gev') return this._live(m.g, x, m);
+    if (m.t === 'skip') {                        // GET TO THE GOODZ: ask once, no game
+      if (x.full || this.queue.some((q) => q.g === m.g && q.kind === 'skip')) return;
+      if (this.gate === 'open') return this.grant(m.g);
+      return this._ask(m.g, { kind: 'skip' });
+    }
     const now = Date.now();
     if (now < x.last + GAP_MS) return;
     x.last = now;
@@ -242,10 +265,15 @@ export class GuestHost extends EventTarget {
   }
 
   _join(g, x, m) {
-    if (x) {                                     // their page reloaded: same phone, same token
-      if (m.k === x.token) this._to(g, { t: 'ok', k: x.token, until: x.until, name: x.name, full: !!x.full });
-      return;
+    if (x) {                                     // back (reload, TRY AGAIN, a rescan): same token
+      if (m.k !== x.token) return;
+      x.away = false;
+      this._to(g, { t: 'ok', k: x.token, until: x.until, name: x.name, full: !!x.full, gate: this.gate });
+      return this._changed();
     }
+    // Coming back with a certificate we don't hold any more (time up, KICK, PWN): no
+    // password to check, so it's not a wrong guess either.
+    if (m.k && !m.p) return this._to(g, { t: 'end', why: 'gone' });
     const now = Date.now();
     if (now < this._pausedUntil) return this._to(g, { t: 'nope', why: 'pause' });
     const code = String(m.p ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -259,14 +287,43 @@ export class GuestHost extends EventTarget {
     const guest = {
       name: handle(m.name) || 'GUEST',
       lang: LANG_CODES.includes(m.lang) ? m.lang : 'en',
-      code, until: now + this.minutes * 60000, token: rand(16), last: 0, full: false, lastGame: 0,
+      code, until: now + this.minutes * 60000, token: rand(16), last: 0, full: this.gate === 'open', lastGame: 0,
     };
     this.guests.set(g, guest);
-    this._to(g, { t: 'ok', k: guest.token, until: guest.until, name: guest.name });
+    this._to(g, { t: 'ok', k: guest.token, until: guest.until, name: guest.name, full: guest.full, gate: this.gate });
     this._news = '';
     this._sendNews();                            // so they know the firewall state
     this._buzz();
     this._changed();
+  }
+
+  /** DEBUG play-by-play. The rig follows whoever started a game last: the CLUE shows their
+   *  bits filling in and the mask plays along (g hunting, w a hit, y an Octlet eaten); the
+   *  hat (too slow to follow) shows the time to beat. */
+  _live(g, x, m) {
+    const now = Date.now();
+    if (now < (x.lastEv || 0) + 120) return;    // a burst of taps: the rig can't keep up anyway
+    x.lastEv = now;
+    const tag = clean(x.name, 12) || 'RUNNER';
+    const bits = (l) => '1'.repeat(l.hits).padStart(8, '0');
+    const CYAN = [0, 238, 255], RED = [255, 40, 40];
+    if (m.e === 'start') {
+      this.live = { g, hits: 0, left: 6, at: now };
+      this.rig.liveShow(`${tag} ${bits(this.live)}`, 'g', CYAN);
+      const best = this.board[0];
+      this.rig.hatText(best ? `TO BEAT ${clean(best.name, 10) || 'RUNNER'} ${mmss(best.ms)}` : 'DEBUG IN PROGRESS', CYAN);
+      return;
+    }
+    const l = this.live;
+    if (!l || l.g !== g) return;                 // someone else's older game
+    l.at = now;
+    const flash = (mask, rgb, sound) => {
+      this.rig.liveShow(`${tag} ${bits(l)}`, mask, rgb, sound);
+      clearTimeout(this._liveT);
+      this._liveT = setTimeout(() => this.live === l && this.rig.liveShow(`${tag} ${bits(l)}`, 'g', CYAN), 350);
+    };
+    if (m.e === 'hit') { l.hits = Math.max(0, Math.min(8, m.n | 0)); flash('w', CYAN, 'm'); }
+    if (m.e === 'eat') { l.left = Math.max(0, Math.min(6, m.n | 0)); flash('y', RED, ''); }
   }
 
   /** A DEBUG result (on trust: it's a party). */
@@ -275,18 +332,21 @@ export class GuestHost extends EventTarget {
     if (now < x.lastGame + GAME_GAP || ms < 3000 || ms > 30 * 60000) return;
     x.lastGame = now;
     const tag = clean(x.name, 12) || 'RUNNER';
+    if (this.live?.g === g) this.live = null;
     if (m.won) {
       x.full = true;
       this._to(g, { t: 'full' });
+      const record = !this.board.length || ms < this.board[0].ms;
       this.board = [...this.board, { name: x.name, ms, saved }].sort((a, b) => a.ms - b.ms).slice(0, BOARD_SIZE);
       if (this.rig.locked) this.rig.purge();     // debugging the rig fixes the rig
-      this.rig.sayText(`BUG FIXED ${tag} ${mmss(ms)}`);
+      this.rig.sayText(`${record ? 'NEW RECORD' : 'BUG FIXED'} ${tag} ${mmss(ms)}`);
     } else if (!this.rig.state.sandbox && !this.rig.locked && now > this._breachAt + BREACH_GAP && Math.random() < 0.5) {
       this._breachAt = now;                      // BUG.EXE escapes into the rig
       this.rig.hack();
       this._to(g, { t: 'breach' });
     } else {
       this._to(g, { t: 'pwn', by: clean(signature(), 16) || 'THE RIG', stay: true });   // ...or into them
+      this.rig.liveShow(`${tag} PWNED`, 'y', [255, 40, 40], '');
     }
     this._buzz();
     this._changed();
@@ -302,6 +362,16 @@ export class GuestHost extends EventTarget {
   _buzz() { try { navigator.vibrate?.(120); } catch {} }
 
   // ---------- the host's answers ----------
+  /** FULL: the owner's say-so, no game needed. */
+  grant(g) {
+    const x = this.guests.get(g);
+    if (!x || x.full) return;
+    x.full = true;
+    this.queue = this.queue.filter((q) => !(q.g === g && q.kind === 'skip'));
+    this._to(g, { t: 'full' });
+    this._changed();
+  }
+
   /** DISCONNECT (or their time ran out, or they left): the certificate is void. */
   kick(g, why = 'kicked') {
     if (!this.guests.has(g)) return;
@@ -316,6 +386,12 @@ export class GuestHost extends EventTarget {
     const q = this.queue.find((v) => v.n === n);
     if (!q) return;
     this.queue = this.queue.filter((v) => v !== q);
+    if (q.kind === 'skip') {
+      if (yes) this.grant(q.g);
+      else this._to(q.g, { t: 'res', kind: 'skip', ok: false });
+      this._changed();
+      return;
+    }
     if (yes) {
       if (q.kind === 'up') this.rig.showPic(q.pic, '');
       else {
@@ -338,6 +414,7 @@ export class GuestHost extends EventTarget {
 
   _expire() {
     const now = Date.now();
+    if (this.live && now > this.live.at + 60000) this.live = null;   // a game left mid-way
     for (const [g, x] of this.guests) if (now > x.until) this.kick(g, 'time');
     const n = this.invites.length;
     this.invites = this.invites.filter((v) => v.until > now);

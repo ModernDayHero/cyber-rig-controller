@@ -443,6 +443,10 @@ body.glitching .mode, body.glitching .pics button { transform: skewX(-12deg); }
 .pwn-by { margin: 0; text-align: center; letter-spacing: 0.2em; color: var(--dim); }
 /* guest page: DEBUG + what's locked until they win it */
 .gdebug { border: 1px solid #ff2dca; border-radius: 6px; padding: 12px; background: color-mix(in srgb, #ff2dca 8%, var(--panel)); }
+.gplay button { padding: 14px 0; font-weight: 700; }
+.gplay #gPlayGame { color: #000; background: #ff2dca; }
+.gplay button[hidden] { display: none; }
+.gplay:has(#gSkip[hidden]) { grid-template-columns: 1fr; }
 .gdebug .gbig { margin: 0; font-size: 18px; color: #ff2dca; text-shadow: 0 0 10px #ff2dca; }
 .gaccess { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; border: 1px solid var(--line); color: var(--dim); }
 body.full .gaccess { color: #000; background: var(--ok); border-color: var(--ok); }

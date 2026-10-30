@@ -21,11 +21,13 @@ const ME_KEY = `rig-guest-${topic}`;
 const rand = (n) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (v) => (v % 36).toString(36)).join('');
 const COOL_MS = 1500;                 // the deck ignores faster than ~1.2 s anyway
 
+// Who we are on this rig, kept on this phone (closing the tab doesn't lose it): our id, the
+// certificate token while it's good, the handle, the language.
 let me = {};
-try { me = JSON.parse(sessionStorage.getItem(ME_KEY)) || {}; } catch {}
+try { me = JSON.parse(localStorage.getItem(ME_KEY)) || {}; } catch {}
 me.g ||= rand(16);
 me.lang ||= guessLang();
-const saveMe = () => { try { sessionStorage.setItem(ME_KEY, JSON.stringify(me)); } catch {} };
+const saveMe = () => { try { localStorage.setItem(ME_KEY, JSON.stringify(me)); } catch {} };
 saveMe();
 
 // ---------- language ----------
@@ -46,6 +48,7 @@ function applyLang() {
 function renderAccess() {
   document.body.classList.toggle('full', !!me.full);
   $('gAccess').textContent = me.full ? t.accessFull : t.accessGuest;
+  $('gSkip').hidden = !!me.full;          // nothing left to skip to
 }
 $('gLang').append(...LANGS.map(({ code, label }) => {
   const b = document.createElement('button');
@@ -66,7 +69,7 @@ function screen(id, state) {
 }
 function end(why) {
   const [title, text] = t.end[why] || t.end.kicked;
-  me.k = null;
+  if (why !== 'left') me.k = null;       // LEAVE keeps the certificate: TRY AGAIN rejoins
   saveMe();
   clearInterval(end.t);
   $('gEndTitle').textContent = title;
@@ -128,7 +131,8 @@ function onAnswer(m) {
       note({ firewall: t.denyFirewall, hacked: t.denyHacked, busy: t.denyBusy, locked: t.lockedHint }[m.why] || t.denied2);
       break;
     case 'res':
-      if (m.why === 'script') note(t.script, 6000);
+      if (m.kind === 'skip') note(t.skipDenied, 6000);
+      else if (m.why === 'script') note(t.script, 6000);
       else note(m.kind === 'up' ? (m.ok ? t.okPic : t.noPic) : (m.ok ? t.okWord : t.noWord));
       break;
     case 'news':
@@ -177,7 +181,8 @@ $('gPass').addEventListener('input', () => {        // ABC-DEF as they type
   const v = $('gPass').value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
   $('gPass').value = v.length > 3 ? `${v.slice(0, 3)}-${v.slice(3)}` : v;
 });
-$('gAgain').addEventListener('click', () => screen('gJoin', 'stOffline'));
+// TRY AGAIN: straight back in while the certificate is good; else a fresh password.
+$('gAgain').addEventListener('click', () => (me.k ? join(true) : screen('gJoin', 'stOffline')));
 
 // ---------- in ----------
 function play() {
@@ -212,13 +217,15 @@ function pwned(by, stay = false) {
     screen('gPwn', '0WN3D');
     $('gPwnBy').textContent = t.pwnBy.replace('{x}', by || 'THE RIG');
     $('gPwnLog').textContent = '';
-    t.pwnLog.forEach((l, i) => setTimeout(() => { $('gPwnLog').textContent += l + '\n'; }, i * 450));
+    // A lost game isn't a revoked certificate: that one opens with BUG.EXE bouncing back.
+    const log = stay ? [t.pwnBounce, ...t.pwnLog.slice(1)] : t.pwnLog;
+    log.forEach((l, i) =>setTimeout(() => { $('gPwnLog').textContent += l + '\n'; }, i * 450));
   }, 1600);
   setTimeout(() => {
     document.body.classList.remove('glitching');
     if (!stay) return end('pwned');
     screen('gPlay', 'stIn');
-    note(`${t.end.pwned[1]} ${t.tryAgain}`, 9000);   // the reveal, always in their language
+    note(me.full ? t.end.pwned[1] : `${t.end.pwned[1]} ${t.tryAgain}`, 9000);   // the reveal, in their language
   }, 8000);
 }
 
@@ -233,6 +240,17 @@ $('gPlayGame').addEventListener('click', () => {
   $('gGame').hidden = false;
 });
 $('gGameClose').addEventListener('click', closeGame);
+$('gSkip').addEventListener('click', () => {
+  if (!me.k || me.full) return;
+  post({ t: 'skip' });
+  note(t.skipAsked, 6000);
+});
+// The game's play-by-play goes to the rig too (its CLUE + mask follow along live).
+const LIVE = { 'bvb-start': 'start', 'bvb-hit': 'hit', 'bvb-eat': 'eat' };
+window.addEventListener('message', (e) => {
+  if (e.origin !== location.origin || !me.k || !LIVE[e.data?.type]) return;
+  post({ t: 'gev', e: LIVE[e.data.type], n: e.data.hits ?? e.data.left ?? 0 });
+});
 window.addEventListener('message', (e) => {
   if (e.origin !== location.origin || e.data?.type !== 'bvb-end' || !me.k) return;
   const { win, ms, saved } = e.data;
@@ -328,7 +346,7 @@ if (!/^cd[a-z0-9]{20}$/.test(topic)) {
   end('link');
 } else {
   opened = listen();
-  if (me.k && me.name) {               // a reload while in: knock again, the deck re-admits
+  if (me.k && me.name) {               // still holding a certificate: knock, the deck re-admits
     $('gName').value = me.name;
     join(true);
   } else {

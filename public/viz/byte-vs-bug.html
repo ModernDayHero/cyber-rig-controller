@@ -153,6 +153,7 @@ code{font-family:var(--display);font-size:.88em;background:var(--abyss);padding:
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const EMBED=new URLSearchParams(location.search).has('embed');
+const tell=m=>{if(EMBED)parent.postMessage(m,location.origin);};   // to the guest page (the rig plays along)
 if(EMBED)document.documentElement.classList.add('embed');
 
 (function(){
@@ -391,7 +392,7 @@ function reset(){
 reset();
 
 const titleOv=document.getElementById('titleOverlay'),endOv=document.getElementById('endOverlay');
-function start(){reset();state='play';titleOv.hidden=true;endOv.hidden=true;}
+function start(){reset();state='play';tell({type:'bvb-start'});titleOv.hidden=true;endOv.hidden=true;}
 document.getElementById('startBtn').addEventListener('click',start);
 document.getElementById('againBtn').addEventListener('click',start);
 window.addEventListener('keydown',e=>{if(e.code==='Space'&&state!=='play'&&document.activeElement.tagName!=='BUTTON'){e.preventDefault();start();}});
@@ -435,7 +436,7 @@ renderer.domElement.addEventListener('pointerdown',e=>{
   const d=Math.hypot(wx-bug.pos.x,wy-bug.pos.y);
   const reach=bug.size*.42+.25+(e.pointerType==='touch'?.35:0);
   if(bug.warp<=0&&d<reach){
-    bug.hits++;bug.flash=.25;
+    bug.hits++;bug.flash=.25;tell({type:'bvb-hit',hits:bug.hits});
     shake=reduceMotion?0:.35;
     burst(wx,wy,{r:255,g:59,b:47},18,4);burst(wx,wy,{r:0,g:238,b:255},10,3);
     updateHud();
@@ -521,7 +522,7 @@ function step(){
     if(bug.stun<=0)octos.forEach(o=>{
       if(!o.alive)return;
       if(o.pos.distanceTo(bug.pos)<bug.size*.45+.3){
-        o.alive=false;o.s.visible=false;bug.eaten.push(o.c);rebuildGhosts();
+        o.alive=false;o.s.visible=false;bug.eaten.push(o.c);rebuildGhosts();tell({type:'bvb-eat',left:octos.filter(q=>q.alive).length});
         bug.size+=.32*SC;bug.speed+=.45;
         burst(o.pos.x,o.pos.y,o.c,22,3.5);shake=reduceMotion?0:.15;
         updateHud();

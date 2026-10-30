@@ -375,6 +375,17 @@ export class Rig extends EventTarget {
     this._takeOver({ key: p.look || 'pic', pic: p.art ? p : null, rgb: p.rgb }, title, p.ms || PIC_MS);
   }
 
+  /** DEBUG play-by-play: big text on the CLUE and a mask mode, nothing on the slow hat. */
+  liveShow(caption, mask, rgb, sound = '') {
+    this.clue.send(cmd.show('t', mask, sound, rgb, '', ascii(caption).toUpperCase().slice(0, 24)));
+  }
+
+  /** Text on the hat and BOLT only (the CLUE keeps what it's doing), for `ms`. */
+  hatText(text, rgb, ms = 60000) {
+    const t = ascii(text).toUpperCase().replace(/\s+/g, ' ').trim().slice(0, 24);
+    if (t) this._takeOver({ key: 'text', text: t, rgb }, '', ms);
+  }
+
   /** Any other word: big text on the CLUE, pages on the hat, scrolling on the BOLT. */
   sayText(text) {
     const t = ascii(text).toUpperCase().replace(/\s+/g, ' ').trim().slice(0, 24);
