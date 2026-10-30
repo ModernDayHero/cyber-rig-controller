@@ -39,6 +39,7 @@ function applyLang() {
   for (const b of $('gLang').children) b.classList.toggle('on', b.dataset.lang === me.lang);
   $('gState').textContent = t[stateKey] ?? stateKey;
   renderNews();
+  buildModes();
 }
 $('gLang').append(...LANGS.map(({ code, label }) => {
   const b = document.createElement('button');
@@ -180,12 +181,8 @@ $('gLeave').addEventListener('click', () => { post({ t: 'bye' }); end('left'); }
 
 // ---------- PWNED ----------
 // About 7 s of this page falling apart: the controls glitch, a fake "exfiltration" log
-// scrolls, I PWNED YOU, then the reveal (end('pwned')) in their language: only this page.
-const PWN_LINES = [
-  '> cert revoked by host', '> injecting octlet.exe ........ OK', '> rerouting your handle ...... OK',
-  '> copying selfies ............ 37%', '> copying selfies ............ 88%',
-  '> uploading to the cyber rig .. OK', '> just kidding.',
-];
+// scrolls, I PWNED YOU, then the reveal (end('pwned')): only this page. All in the
+// guest's language.
 function pwned(by) {
   me.k = null;
   saveMe();
@@ -194,9 +191,9 @@ function pwned(by) {
   try { navigator.vibrate?.([80, 60, 80, 60, 300]); } catch {}
   setTimeout(() => {
     screen('gPwn', '0WN3D');
-    $('gPwnBy').textContent = `by ${by || 'THE RIG'}`;
+    $('gPwnBy').textContent = t.pwnBy.replace('{x}', by || 'THE RIG');
     $('gPwnLog').textContent = '';
-    PWN_LINES.forEach((l, i) => setTimeout(() => { $('gPwnLog').textContent += l + '\n'; }, i * 450));
+    t.pwnLog.forEach((l, i) => setTimeout(() => { $('gPwnLog').textContent += l + '\n'; }, i * 450));
   }, 1600);
   setTimeout(() => {
     document.body.classList.remove('glitching');
@@ -228,7 +225,7 @@ function buildModes() {
     if (m.alt) b.style.setProperty('--c2', m.alt);
     b.innerHTML = `<span class="name"></span><span class="hint"></span><span class="bar"></span>`;
     b.querySelector('.name').textContent = m.name;
-    b.querySelector('.hint').textContent = m.hint;
+    b.querySelector('.hint').textContent = t.hints[m.key] ?? m.hint;
     b.addEventListener('click', () => {
       act({ t: 'mode', set: gSet, i });
       for (const el of $('gModes').children) el.classList.toggle('active', el === b);
@@ -236,8 +233,6 @@ function buildModes() {
     return b;
   }));
 }
-buildModes();
-
 $('gHack').addEventListener('click', () => act({ t: 'hack' }));
 
 function say() {

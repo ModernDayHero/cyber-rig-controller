@@ -315,6 +315,7 @@ output { width: 44px; text-align: right; font-size: 13px; }
 .gitem.pending .who { color: #00e5ff; font-weight: 700; letter-spacing: 0.1em; }
 .invite-head { margin: 0; text-align: center; font-weight: 700; letter-spacing: 0.2em; color: #00e5ff; }
 .invite-code { margin: 0; text-align: center; font-size: 44px; font-weight: 700; letter-spacing: 0.14em; color: #fff; text-shadow: 0 0 14px #00e5ff; }
+.invite-open { display: block; text-align: center; text-decoration: none; padding: 12px 0; }
 .invite.used .invite-code { text-decoration: line-through; opacity: 0.4; }
 .gitem.ask { border-left: 3px solid #00e5ff; padding-left: 7px; }
 .invite {
@@ -435,5 +436,7 @@ body.glitching .mode, body.glitching .pics button { transform: skewX(-12deg); }
 .pwn-big::before, .pwn-big::after { content: attr(data-text); position: absolute; inset: 0; }
 .pwn-big::before { color: #00e5ff; transform: translate(-3px, 0); clip-path: inset(0 0 55% 0); mix-blend-mode: screen; }
 .pwn-big::after { color: #ff2bd6; transform: translate(3px, 0); clip-path: inset(50% 0 0 0); mix-blend-mode: screen; }
+.pwn-sub { margin: -6px 0 0; text-align: center; font-size: 22px; font-weight: 700; color: #ff2bd6; text-shadow: 0 0 12px #ff2bd6; }
+.pwn-sub:empty { display: none; }
 .pwn-by { margin: 0; text-align: center; letter-spacing: 0.2em; color: var(--dim); }
 body.cooling #gPlay .mode, body.cooling #gPlay .pics button, body.cooling #gHack { opacity: 0.5; pointer-events: none; }

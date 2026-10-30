@@ -559,6 +559,7 @@ function openInvite() {
   qr.make();
   $('inviteQr').innerHTML = qr.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
   $('inviteCode').textContent = showCode(shownInvite.code);
+  $('inviteOpen').href = host.link;           // this phone / PC: a guest tab, for testing
   tickInvite();
   if (!$('invite').open) $('invite').showModal();
 }
