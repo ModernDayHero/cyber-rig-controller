@@ -312,11 +312,26 @@ output { width: 44px; text-align: right; font-size: 13px; }
 .gitem button { flex: none; padding: 8px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; }
 .gitem .yes { background: var(--ok); border: 0; color: #000; }
 .gitem.full .who { color: var(--ok); }
+.gitem { flex-wrap: wrap; }
+.gitem .who { flex: 1 1 40%; }
+.gitem.op { border-left: 3px solid #ff2dca; padding-left: 7px; }
+.gitem.op .who small { color: #ff2dca; font-weight: 700; }
+.runners { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+.runners:empty { display: none; }
+.runner { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; letter-spacing: 0.04em; }
+.runner span { flex: 1 1 100%; }
+.runner canvas { width: 32px; height: 32px; image-rendering: pixelated; background: #000; border: 1px solid var(--line); }
+.runner canvas.blocked { opacity: 0.3; }
+.gperms { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 0 6px 10px; }
+.gperms button { padding: 6px 8px; border-radius: 4px; font-size: 10px; letter-spacing: 0.06em; background: transparent; border: 1px solid var(--line); color: var(--dim); }
+.gperms button.on { color: #000; background: var(--ok); border-color: var(--ok); }
+.gperms button.all { color: var(--ok); border-color: var(--ok); }
 .gboard { font-size: 11px; letter-spacing: 0.08em; color: var(--dim); padding-top: 4px; border-top: 1px solid var(--line); }
 .gitem .pwn { background: var(--bad); border: 0; color: #000; }
 .gitem.pending .who { color: #00e5ff; font-weight: 700; letter-spacing: 0.1em; }
 .invite-head { margin: 0; text-align: center; font-weight: 700; letter-spacing: 0.2em; color: #00e5ff; }
 .invite-code { margin: 0; text-align: center; font-size: 44px; font-weight: 700; letter-spacing: 0.14em; color: #fff; text-shadow: 0 0 14px #00e5ff; }
+.invite-badge { width: 100%; padding: 12px 0; color: #00e5ff; border-color: #00e5ff; font-weight: 700; letter-spacing: 0.1em; }
 .invite-open { display: block; text-align: center; text-decoration: none; padding: 12px 0; }
 .invite.used .invite-code { text-decoration: line-through; opacity: 0.4; }
 .gitem.ask { border-left: 3px solid #00e5ff; padding-left: 7px; }
@@ -450,8 +465,11 @@ body.glitching .mode, body.glitching .pics button { transform: skewX(-12deg); }
 .gdebug .gbig { margin: 0; font-size: 18px; color: #ff2dca; text-shadow: 0 0 10px #ff2dca; }
 .gaccess { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; border: 1px solid var(--line); color: var(--dim); }
 body.full .gaccess { color: #000; background: var(--ok); border-color: var(--ok); }
-body:not(.full) .needs-full { position: relative; opacity: 0.35; pointer-events: none; filter: grayscale(0.7); }
-body:not(.full) .needs-full::after {
+.gturn { margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-align: center; color: var(--dim); }
+.gturn.op { color: #000; background: #ff2dca; border-color: #ff2dca; box-shadow: 0 0 14px #ff2dca; }
+.gturn[hidden] { display: none; }
+[data-perm].locked { position: relative; opacity: 0.35; pointer-events: none; filter: grayscale(0.7); }
+[data-perm].locked::after {
   content: attr(data-lock); position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
   font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: #fff; text-shadow: 0 0 6px #000;
 }

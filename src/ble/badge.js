@@ -3,11 +3,12 @@
 //
 // Screen slots, kept on the badge: 0 login QR, 1 STEAMWorkz card, 2-5 the last four
 // guest portraits (send to SLOT.GUEST and the badge picks the oldest one to replace),
-// 6 an invite (stays up until we show something else).
+// 6 an invite (stays up until we show something else), 7 HIGH SCORES.
 //
 // One custom service, two characteristics:
 //   RX  (we write, with response, <= 500 bytes each)
-//       'B' u32 length u8 slot  a frame is coming: `length` bytes of PackBits data
+//       'B' u32 length u8 slot u8 flags  a frame is coming: `length` bytes of PackBits
+//                               data; flags 1 = quiet (keep it, don't show it)
 //       'D' data...             the next piece of it
 //       'E'                     that's all: unpack, keep it in its slot, show it
 //       'S' u8 slot             show a stored slot
@@ -28,7 +29,7 @@ const BADGE_RX = '7a1e0002-5d2c-4e8b-9c1f-3b6a8d0e4f21';
 const BADGE_TX = '7a1e0003-5d2c-4e8b-9c1f-3b6a8d0e4f21';
 export const BADGE_NAME_PREFIX = 'RIG-BADGE';
 export const PANEL = { w: 960, h: 540 };       // native; the badge is worn portrait
-export const SLOT = { LOGIN: 0, CARD: 1, INVITE: 6, GUEST: 255 };
+export const SLOT = { LOGIN: 0, CARD: 1, INVITE: 6, SCORES: 7, GUEST: 255 };
 const CHUNK = 500;                              // long writes: Chrome splits to the MTU
 
 const dec = new TextDecoder();
@@ -116,17 +117,18 @@ export class Badge extends RigDevice {
 
   /** Send a packed 960x540 4-bit frame (Uint8Array, 259 200 bytes) into a slot; it shows
    *  straight away. Progress 0..1 as events. */
-  async sendFrame(frame, slot = SLOT.LOGIN) {
+  async sendFrame(frame, slot = SLOT.LOGIN, { quiet = false } = {}) {
     if (!this.rx) throw new Error('Badge not connected');
     if (this.busy) throw new Error('Badge is still busy');
     this.busy = true;
     const progress = (v) => this.dispatchEvent(new CustomEvent('progress', { detail: v }));
     try {
       const data = packBits(frame);
-      const head = new Uint8Array(6);
+      const head = new Uint8Array(7);
       head[0] = 0x42;                                         // 'B'
       new DataView(head.buffer).setUint32(1, data.length, true);
       head[5] = slot;
+      head[6] = quiet ? 1 : 0;
       const ready = this._reply(5000);
       await this._write(head);
       await ready;

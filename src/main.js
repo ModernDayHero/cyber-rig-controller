@@ -6,7 +6,7 @@ import { decodeImage, toBolt, toHat, toPic, paintPreview, paintHat } from './ima
 import { EFFECTS, rgb323, fromRgb323 } from './ble/spotled.js';
 import { Status } from './ble/device.js';
 import { setupDrive } from './drive.js';
-import { GuestHost, GUEST_MINUTES, DEFAULT_RELAY, showCode } from './guests.js';
+import { GuestHost, GUEST_MINUTES, TURN_SECS, PERMS, DEFAULT_RELAY, showCode } from './guests.js';
 import { setupBadge } from './badgetab.js';
 import { ascii, LANGS } from './i18n.js';
 import qrcode from 'qrcode-generator';
@@ -562,8 +562,25 @@ function openInvite() {
   $('inviteOpen').href = host.link;           // this phone / PC: a guest tab, for testing
   tickInvite();
   if (!$('invite').open) $('invite').showModal();
-  badgeTab?.sendInvite(shownInvite);          // and on the badge, if it's linked
+  if (rig.badge.connected) pushInvite();      // and on the badge, if it's linked
 }
+
+// PUSH TO BADGE: put this invite on the badge (again), e.g. after linking it.
+async function pushInvite() {
+  const b = $('invitePush'), label = b.firstChild;
+  if (!shownInvite || !host.invites.includes(shownInvite)) return showBanner('That password is used up: tap NEW.');
+  if (!rig.badge.connected) return showBanner('Link the badge first: tap the Badge chip.');
+  b.disabled = true;
+  label.textContent = 'PUSHING…';
+  const ok = await badgeTab.sendInvite(shownInvite);
+  label.textContent = ok ? 'ON THE BADGE ✓' : 'PUSH TO BADGE';
+  b.disabled = false;
+  if (ok) setTimeout(() => { label.textContent = 'PUSH TO BADGE'; }, 4000);
+}
+$('invitePush').addEventListener('click', pushInvite);
+rig.badge.addEventListener('progress', (e) => {
+  if ($('invite').open) $('invitePushBar').style.width = `${Math.round(e.detail * 100)}%`;
+});
 function tickInvite() {
   if (!shownInvite || !$('invite').open) return;
   const used = !host.invites.includes(shownInvite);
@@ -575,19 +592,18 @@ $('inviteBtn').addEventListener('click', openInvite);
 $('inviteBtn2').addEventListener('click', openInvite);
 $('inviteNew').addEventListener('click', openInvite);
 segPick('guestGate', 'gate', (v) => host.setGate(v));
+segPick('driveGuests', 'g', (v) => host.setLetDrive(v === '1'));
 $('guestRelay').value = host.relay;
 $('guestRelay').addEventListener('change', () => {
   const v = $('guestRelay').value.trim() || DEFAULT_RELAY;
   if (v === host.relay) return;
   if (!confirm('Switch the guest relay? Everyone is disconnected and the QR changes (resend the badge).')) {
-    segPick('guestGate', 'gate', (v) => host.setGate(v));
-$('guestRelay').value = host.relay;
+    $('guestRelay').value = host.relay;
     return;
   }
   if (!host.setRelay(v)) {
     showBanner('The relay needs a full https:// address of an ntfy server.');
-    segPick('guestGate', 'gate', (v) => host.setGate(v));
-$('guestRelay').value = host.relay;
+    $('guestRelay').value = host.relay;
   }
 });
 $('guestNewLink').addEventListener('click', () => {
@@ -617,11 +633,39 @@ function gItem(cls, who, sub, ...buttons) {
   return row;
 }
 const left = (until) => mmss(until - Date.now()) + ' left';
+// What a guest's row says under their name: operator / place in line / time left.
+function guestSub(g, x, line) {
+  if (host.isOp(g)) return `OPERATOR ${mmss(host.turn.until - Date.now())} · ${left(x.until)}`;
+  const i = line.findIndex(([id]) => id === g);
+  return i >= 0 ? `#${i + 1} IN LINE · ${left(x.until)}` : left(x.until);
+}
+const PERM_LABEL = { modes: 'PATTERNS', hack: 'HACK', drive: 'DRIVE', up: 'UPLOAD', say: 'WORDS', pic: 'PICS' };
+const openPerms = new Set();           // guests whose PERMS panel is open
+function permRow(g, x) {
+  const row = document.createElement('div');
+  row.className = 'gperms';
+  for (const p of PERMS) {
+    const b = document.createElement('button');
+    b.textContent = PERM_LABEL[p];
+    b.className = x.perms[p] ? 'on' : '';
+    b.setAttribute('aria-pressed', String(!!x.perms[p]));
+    b.addEventListener('click', () => host.setPerm(g, p, !x.perms[p]));
+    row.append(b);
+  }
+  const all = document.createElement('button');
+  all.textContent = 'ALL';
+  all.className = 'all';
+  all.addEventListener('click', () => host.grant(g));
+  row.append(all);
+  return row;
+}
 function renderGuests() {
   $('guestSwitch').setAttribute('aria-checked', String(host.enabled));
   $('guestbar').hidden = !host.enabled;
   segShow('guestTime', 'min', host.minutes);
   segShow('guestGate', 'gate', host.gate);
+  segShow('guestTurn', 'turn', host.turnSec);
+  segShow('driveGuests', 'g', host.letDrive ? 1 : 0);
   if (!host.enabled) { $('guestList').replaceChildren(); return; }
   const n = host.guests.size;
   $('guestCount').textContent = n ? `${n} RUNNER${n > 1 ? 'S' : ''} JACKED IN` : 'PORT OPEN';
@@ -631,15 +675,24 @@ function renderGuests() {
     r.dataset.until = v.until;
     rows.push(r);
   }
-  for (const [g, x] of host.guests) {
+  // The operator first, then the line in order (winners, fastest on top), then the rest.
+  const line = host.line(), op = host.turn && host.guests.get(host.turn.g);
+  const ordered = [...(op ? [[host.turn.g, op]] : []), ...line];
+  const seen = new Set(ordered.map(([g]) => g));
+  for (const [g, x] of [...ordered, ...[...host.guests].filter(([g]) => !seen.has(g))]) {
     const tag = LANGS.find((l) => l.code === x.lang)?.label || 'EN';
-    const r = gItem(x.full ? 'full' : '', `${x.name} · ${tag}${x.full ? ' · FULL' : ''}${x.away ? ' · AWAY' : ''}`, left(x.until),
-      ...(x.full ? [] : [['FULL', 'yes', () => host.grant(g)]]),
-      ['KICK', 'ghost', () => host.kick(g)],
+    const best = x.best ? ` · ${mmss(x.best)}` : '';
+    const r = gItem(`${x.full ? 'full' : ''}${host.isOp(g) ? ' op' : ''}`,
+      `${x.name} · ${tag}${x.full ? ' · FULL' : ''}${best}${x.away ? ' · AWAY' : ''}`, guestSub(g, x, line),
+      ...(host.isOp(g) ? [['NEXT', 'ghost', () => host.endTurn()]] : []),
+      ['PERMS', openPerms.has(g) ? 'yes' : 'ghost', () => { openPerms.has(g) ? openPerms.delete(g) : openPerms.add(g); renderGuests(); }],
+      ['REVOKE', 'ghost', () => host.kick(g)],
       ['PWN', 'pwn', () => host.pwn(g, callsign())]);
-    r.dataset.until = x.until;
+    r.dataset.g = g;
     rows.push(r);
+    if (openPerms.has(g)) rows.push(permRow(g, x));
   }
+  for (const g of openPerms) if (!host.guests.has(g)) openPerms.delete(g);
   for (const q of host.queue) {
     const name = host.guests.get(q.g)?.name || 'GUEST';
     if (q.kind === 'skip') {
@@ -665,7 +718,51 @@ function renderGuests() {
 host.addEventListener('change', renderGuests);
 host.addEventListener('tick', () => {        // just the countdowns, so buttons don't jump under a finger
   for (const r of $('guestList').querySelectorAll('[data-until]')) r.querySelector('small').textContent = left(+r.dataset.until);
+  const line = host.line();
+  for (const r of $('guestList').querySelectorAll('[data-g]')) {
+    const x = host.guests.get(r.dataset.g);
+    if (x) r.querySelector('small').textContent = guestSub(r.dataset.g, x, line);
+  }
   tickInvite();
+});
+// ---------- RUNNERS LOG (SET -> GUESTS): everyone who jacked in tonight ----------
+function renderRunners() {
+  const list = Object.values(host.runners).sort((a, b) => (a.best ?? Infinity) - (b.best ?? Infinity) || b.last - a.last);
+  $('runnersCount').textContent = list.length ? `${list.length} logged` : 'nobody yet';
+  $('runnersList').replaceChildren(...list.map((r) => {
+    const row = document.createElement('div');
+    row.className = 'runner';
+    const who = document.createElement('span');
+    const lang = LANGS.find((l) => l.code === r.lang)?.label || 'EN';
+    who.textContent = `${r.name} · ${lang} · ${r.best ? mmss(r.best) : '--:--'} · ${r.wins}W ${r.losses}L`;
+    row.append(who);
+    for (const p of r.pics) {
+      const cv = picCanvas(p);
+      cv.title = `${p.caption || 'picture'}: ${p.shown === true ? 'shown' : p.shown === false ? 'blocked' : 'waiting'}`;
+      cv.classList.toggle('blocked', p.shown === false);
+      row.append(cv);
+    }
+    return row;
+  }));
+}
+host.addEventListener('change', renderRunners);
+renderRunners();
+$('runnersClear').addEventListener('click', () => {
+  if (confirm('Clear the runners log and the DEBUG leaderboard? This can’t be undone.')) host.clearRunners();
+});
+$('runnersExport').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(host.runners, null, 1)], { type: 'application/json' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `runners-${new Date().toISOString().slice(0, 10)}.json` });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+
+TURN_SECS.forEach((s) => {
+  const b = document.createElement('button');
+  b.textContent = `${s} S`;
+  b.dataset.turn = s;
+  b.addEventListener('click', () => host.setTurnSec(s));
+  $('guestTurn').append(b);
 });
 renderGuests();
 const badgeTab = setupBadge({ rig, host, $, segPick, segShow, showBanner });

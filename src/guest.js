@@ -40,15 +40,32 @@ function applyLang() {
   for (const el of document.querySelectorAll('[data-i18n-ph]')) el.placeholder = t[el.dataset.i18nPh];
   for (const b of $('gLang').children) b.classList.toggle('on', b.dataset.lang === me.lang);
   $('gState').textContent = t[stateKey] ?? stateKey;
-  for (const el of document.querySelectorAll('.needs-full')) el.dataset.lock = t.lockedHint;
   renderNews();
   renderAccess();
   buildModes();
 }
+// What's theirs: each section has a permission (data-perm); patterns / hack / drive are
+// also the operator's only, one guest at a time (turns, guests.js).
+const TURN_PERMS = new Set(['modes', 'hack', 'drive']);
 function renderAccess() {
   document.body.classList.toggle('full', !!me.full);
   $('gAccess').textContent = me.full ? t.accessFull : t.accessGuest;
   $('gSkip').hidden = !!me.full;          // nothing left to skip to
+  const perms = me.perms || {};
+  for (const el of document.querySelectorAll('[data-perm]')) {
+    const p = el.dataset.perm, mine = !!perms[p], wait = mine && TURN_PERMS.has(p) && !me.op;
+    el.classList.toggle('locked', !mine || wait);
+    el.dataset.lock = !mine ? t.lockedHint : wait ? t.waitTurn : '';
+  }
+  renderTurn();
+}
+function renderTurn() {
+  const el = $('gTurn'), canOperate = [...TURN_PERMS].some((p) => me.perms?.[p]);
+  el.hidden = !canOperate || (!me.op && !me.pos);
+  el.classList.toggle('op', !!me.op);
+  const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  el.textContent = me.op ? `${t.opYou} · ${mmss(me.turnUntil - Date.now())}`
+    : `${t.inLine.replace('{n}', me.pos).replace('{t}', mmss(me.turnAt - Date.now()))}${me.full ? '' : ' · ' + t.moveUp}`;
 }
 $('gLang').append(...LANGS.map(({ code, label }) => {
   const b = document.createElement('button');
@@ -102,15 +119,27 @@ let news = { fw: false, hacked: false };
 function onAnswer(m) {
   switch (m.t) {
     case 'ok':
-      Object.assign(me, { k: m.k, until: m.until, full: !!m.full });
+      Object.assign(me, { k: m.k, until: m.until, full: !!m.full, perms: m.perms || {} });
       saveMe();
       play();
       break;
     case 'full':
       me.full = true;
+      if (m.perms) me.perms = m.perms;
       saveMe();
       renderAccess();
       note(t.fullGranted, 6000);
+      break;
+    case 'perms':                        // the owner changed what's ours
+      me.perms = m.perms || {};
+      me.full = !!m.full;
+      saveMe();
+      renderAccess();
+      break;
+    case 'turn':                         // OPERATOR now, or our place in line
+      Object.assign(me, m.op ? { op: true, turnUntil: m.until, pos: 0 } : { op: false, pos: m.pos, turnAt: Date.now() + (m.eta || 0) });
+      renderAccess();
+      if (m.op) { note(t.opYou, 5000); try { navigator.vibrate?.([60, 40, 60]); } catch {} }
       break;
     case 'breach':
       note(t.breachYou, 6000);
@@ -128,7 +157,8 @@ function onAnswer(m) {
       pwned(m.by, m.stay);
       break;
     case 'deny':
-      note({ firewall: t.denyFirewall, hacked: t.denyHacked, busy: t.denyBusy, locked: t.lockedHint }[m.why] || t.denied2);
+      note({ firewall: t.denyFirewall, hacked: t.denyHacked, busy: t.denyBusy, locked: t.lockedHint,
+        wheel: t.denyWheel, parked: t.denyParked, turn: t.waitTurn }[m.why] || t.denied2);
       break;
     case 'res':
       if (m.kind === 'skip') note(t.skipDenied, 6000);
@@ -136,7 +166,7 @@ function onAnswer(m) {
       else note(m.kind === 'up' ? (m.ok ? t.okPic : t.noPic) : (m.ok ? t.okWord : t.noWord));
       break;
     case 'news':
-      news = { fw: !!m.fw, hacked: !!m.hacked };
+      news = { fw: !!m.fw, hacked: !!m.hacked, drive: !!m.drive };
       renderNews();
       break;
   }
@@ -191,6 +221,8 @@ function play() {
   const tick = () => {
     const s = Math.max(0, Math.ceil((me.until - Date.now()) / 1000));
     $('gTime').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    if (me.op && Date.now() > me.turnUntil) { me.op = false; renderAccess(); }   // the deck moves the line on
+    else renderTurn();
     if (!s) end('time');
   };
   tick();
@@ -262,6 +294,7 @@ window.addEventListener('message', (e) => {
 });
 
 function renderNews() {
+  $('gDrive').hidden = !news.drive;
   $('gHack').disabled = news.fw;
   $('gHack').textContent = news.fw ? t.fwOn : t.hackAll;
   $('gHackHint').textContent = news.fw ? t.fwHint : news.hacked ? t.hackedHint : t.hackHint;
@@ -294,6 +327,54 @@ function buildModes() {
   }));
 }
 $('gHack').addEventListener('click', () => act({ t: 'hack' }));
+
+// ---------- DRIVE THE BOLT ----------
+// Hold and drag; the deck drives at the owner's MAX and stops if we go quiet for 1.5 s.
+// Through the relay it lags a bit, so: only real changes, a heartbeat while moving, and
+// the stop goes at once.
+{
+  const stick = $('gStick'), knob = $('gKnob');
+  let held = false, x = 0, y = 0, sent = { s: 0, h: 0, at: 0 }, beat = null;
+  const DEAD = 0.15;
+  const send = (s, h, now = Date.now()) => {
+    sent = { s, h, at: now };
+    post({ t: 'drv', s: Math.round(s * 100) / 100, h: Math.round(h) });
+  };
+  const update = (force = false) => {
+    knob.style.left = `${50 + x * 36}%`;
+    knob.style.top = `${50 - y * 36}%`;
+    stick.classList.toggle('live', held);
+    const m = Math.min(1, Math.hypot(x, y));
+    const s = held && m > DEAD ? (m - DEAD) / (1 - DEAD) : 0;
+    const h = (Math.atan2(x, y) * 180 / Math.PI + 360) % 360;
+    const now = Date.now(), dh = Math.abs(((h - sent.h + 540) % 360) - 180);
+    if (s === 0) { if (sent.s !== 0 || force) send(0, sent.h, now); return; }
+    if (force || now > sent.at + 300 && (Math.abs(s - sent.s) > 0.15 || dh > 12)) send(s, h, now);
+  };
+  const at = (e) => {
+    const r = stick.getBoundingClientRect();
+    x = Math.max(-1, Math.min(1, (e.clientX - r.left - r.width / 2) / (r.width * 0.36)));
+    y = Math.max(-1, Math.min(1, -(e.clientY - r.top - r.height / 2) / (r.height * 0.36)));
+  };
+  const release = () => {
+    if (!held) return;
+    held = false;
+    x = y = 0;
+    clearInterval(beat);
+    update(true);
+  };
+  stick.addEventListener('pointerdown', (e) => {
+    if (!me.k) return;
+    stick.setPointerCapture(e.pointerId);
+    held = true;
+    at(e);
+    update(true);
+    beat = setInterval(() => { if (held && sent.s > 0) send(sent.s, sent.h); }, 1000);   // still here
+  });
+  stick.addEventListener('pointermove', (e) => { if (held) { at(e); update(); } });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) stick.addEventListener(ev, release);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) release(); });
+}
 
 function say() {
   const text = $('gText').value.trim();

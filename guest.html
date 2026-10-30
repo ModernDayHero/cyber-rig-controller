@@ -45,6 +45,7 @@
           <button class="ghost go" id="gLeave" data-i18n="leave"></button>
         </div>
         <p class="banner" id="gNote" hidden></p>
+        <p class="gturn" id="gTurn" hidden></p>
 
         <section class="panel gdebug" aria-label="DEBUG">
           <p class="gbig">DEBUG // BYTE vs BUG.EXE</p>
@@ -55,17 +56,17 @@
           </div>
         </section>
 
-        <div class="needs-full panel">
+        <div class="panel" data-perm="modes">
           <nav class="tabs" id="gTabs" aria-label="Mode set"></nav>
           <section class="modes" id="gModes" aria-label="Modes"></section>
         </div>
 
-        <section class="panel needs-full" aria-label="The virus">
+        <section class="panel" data-perm="hack" aria-label="The virus">
           <button class="ghost send danger" id="gHack"></button>
           <span class="hint" id="gHackHint"></span>
         </section>
 
-        <section class="panel" aria-label="Say something">
+        <section class="panel" data-perm="say" aria-label="Say something">
           <div class="row">
             <input class="text" id="gText" maxlength="24" data-i18n-ph="wordPh" enterkeyhint="send" />
             <button class="ghost go" id="gSay" data-i18n="send"></button>
@@ -73,12 +74,18 @@
           <span class="hint" data-i18n="wordHint"></span>
         </section>
 
-        <section class="panel" aria-label="Pictures">
+        <section class="panel" data-perm="pic" aria-label="Pictures">
           <span class="label" data-i18n="pictures"></span>
           <div class="pics" id="gPics"></div>
         </section>
 
-        <section class="panel needs-full" aria-label="Send your own picture">
+        <section class="panel" data-perm="drive" id="gDrive" hidden aria-label="Drive the BOLT">
+          <span class="label" data-i18n="driveTitle"></span>
+          <div class="stick" id="gStick"><div class="knob" id="gKnob"></div></div>
+          <span class="hint" data-i18n="driveHint"></span>
+        </section>
+
+        <section class="panel" data-perm="up" aria-label="Send your own picture">
           <span class="label" data-i18n="yourPic"></span>
           <div class="imgrow">
             <canvas class="pix pic-pix" id="gUpPreview" width="16" height="16"></canvas>

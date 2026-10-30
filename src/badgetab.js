@@ -4,7 +4,9 @@
 //   CARD   slot 1: the STEAMWorkz card, two QRs: the GitHub repo and the guest page
 //   PHOTO  a guest portrait (slots 2-5, the badge keeps the last four): any picture,
 //          cropped (drag it / ZOOM), contrast, 16 greys with dithering
-// KEY 1 on the badge flips LOGIN <-> CARD; KEY 2 steps through the portraits. WORN /
+//   SCORES slot 7: HIGH SCORES from DEBUG; refreshed quietly after each win, shown on a
+//          NEW RECORD so the winner can photograph it
+// KEY 1 on the badge steps LOGIN -> CARD -> SCORES; KEY 2 steps through the portraits. WORN /
 // TABLE (SET → BADGE) decides what happens after a portrait.
 
 import qrcode from 'qrcode-generator';
@@ -19,7 +21,8 @@ const DEFAULTS = {
   kind: 'login', callsign: 'MODERNDAYHERO', turn: 'cw', zoom: 1, panX: 0, panY: 0, contrast: 1.2, brightness: 0,
   dither: true, mode: 0, hold: 180, repo: REPO_URL,
 };
-const KIND_SLOT = { login: SLOT.LOGIN, card: SLOT.CARD, photo: SLOT.GUEST };
+const KIND_SLOT = { login: SLOT.LOGIN, card: SLOT.CARD, scores: SLOT.SCORES, photo: SLOT.GUEST };
+const mmss = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
   const badge = rig.badge;
@@ -133,9 +136,57 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
     g.fillText(st.callsign, w / 2, 908);
   }
 
+  /** HIGH SCORES: the top eight from DEBUG, handles in their own script, and a way in. */
+  function drawScores() {
+    const { w } = BADGE, board = host.board.slice(0, 8);
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, w, BADGE.h);
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, w, 140);
+    g.fillStyle = '#fff';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = `700 58px ${font}`;
+    g.fillText('HIGH SCORES', w / 2, 56);
+    g.font = `22px ${font}`;
+    g.fillText('DEBUG // BYTE vs BUG.EXE', w / 2, 108);
+    g.fillStyle = '#000';
+    if (!board.length) {
+      g.font = `700 34px ${font}`;
+      g.fillText('NO RUNNERS YET', w / 2, 380);
+      g.font = `26px ${font}`;
+      g.fillText('be the first to beat BUG.EXE', w / 2, 430);
+    }
+    board.forEach((b, i) => {
+      const y = 196 + i * 68, top = i === 0;
+      if (top) { g.fillRect(24, y - 32, w - 48, 64); g.fillStyle = '#fff'; }
+      g.textAlign = 'left';
+      g.font = `700 ${top ? 40 : 34}px ${font}`;
+      g.fillText(String(i + 1), 44, y);
+      let px = top ? 36 : 32;                  // the handle, as big as fits beside the time
+      do g.font = `700 ${px--}px ${font}`; while (g.measureText(b.name).width > 300 && px > 16);
+      g.fillText(b.name, 96, y);
+      g.textAlign = 'right';
+      g.font = `700 ${top ? 40 : 34}px ${font}`;
+      g.fillText(mmss(b.ms), w - 44, y);
+      g.fillStyle = '#000';
+      if (!top) g.fillRect(40, y + 32, w - 80, 1);
+    });
+    drawQr(host.link, 130, 760, 170);           // think you're faster? the way in
+    g.textAlign = 'left';
+    g.font = `700 30px ${font}`;
+    g.fillText('THINK YOU', 240, 790);
+    g.fillText('CAN BEAT IT?', 240, 830);
+    g.font = `24px ${font}`;
+    g.fillText('ask for a password', 240, 874);
+    g.font = `700 22px ${font}`;
+    g.fillText(st.callsign, 240, 912);
+  }
+
   function render() {
     if (st.kind === 'login') drawLogin();
     else if (st.kind === 'card') drawCard();
+    else if (st.kind === 'scores') drawScores();
     else if (photo) badgeCrop(g, photo, st);
     else { g.fillStyle = '#fff'; g.fillRect(0, 0, BADGE.w, BADGE.h); }
     const img = g.getImageData(0, 0, BADGE.w, BADGE.h);
@@ -151,7 +202,7 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
     segShow('badgeDither', 'dither', st.dither ? 1 : 0);
     segShow('badgeTurn', 'turn', st.turn);
     for (const p of document.querySelectorAll('#view-badge [data-pane]')) p.hidden = !p.dataset.pane.split(' ').includes(st.kind);
-    $('badgeSend').firstChild.textContent = { login: 'SAVE AS LOGIN SCREEN', card: 'SAVE AS CARD', photo: 'SEND AS PORTRAIT' }[st.kind];
+    $('badgeSend').firstChild.textContent = { login: 'SAVE AS LOGIN SCREEN', card: 'SAVE AS CARD', scores: 'SAVE AS SCORES', photo: 'SEND AS PORTRAIT' }[st.kind];
     segShow('badgeMode', 'mode', st.mode);
     $('badgeHold').value = st.hold;
     $('badgeHoldOut').textContent = st.hold >= 60 ? `${Math.round(st.hold / 6) / 10} min` : `${st.hold} s`;
@@ -237,6 +288,7 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
   };
   $('badgeShowLogin').addEventListener('click', showSlot(SLOT.LOGIN, 'login screen'));
   $('badgeShowCard').addEventListener('click', showSlot(SLOT.CARD, 'card'));
+  $('badgeShowScores').addEventListener('click', showSlot(SLOT.SCORES, 'scores'));
   badge.addEventListener('ready', sendMode);           // the badge learns WORN / TABLE on connect
   badge.addEventListener('progress', (e) => {
     $('badgeBar').style.width = `${Math.round(e.detail * 100)}%`;
@@ -253,7 +305,7 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
   };
   badge.addEventListener('info', info);
   badge.addEventListener('status', info);
-  host.addEventListener('change', () => { if (st.kind === 'login') renderSoon(); });   // OPEN / closed line
+  host.addEventListener('change', () => { if (st.kind === 'login' || st.kind === 'scores') renderSoon(); });
   info();
   show();
 
@@ -282,5 +334,28 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
     onBadge = null;
     if (badge.connected && !badge.busy) badge.show(SLOT.LOGIN).catch(() => {});
   });
+  // ---------- HIGH SCORES on the badge: refreshed after every win ----------
+  // A new top time puts them on the badge (WORN: for HOLD, then back to login); any other
+  // change is saved quietly for KEY 1 / the slideshow. A busy badge gets it on the next try.
+  let scoresSig = JSON.stringify(host.board), topSig = JSON.stringify(host.board[0] || null), scoresDue = null;
+  async function sendScores(show) {
+    if (!badge.connected) return;
+    if (badge.busy) { scoresDue = !!(scoresDue || show); return; }   // a NEW RECORD stays a show
+    scoresDue = null;
+    drawScores();
+    const frame = packBadge(toGrey16(g.getImageData(0, 0, BADGE.w, BADGE.h), { dither: false }), st.turn);
+    render();
+    try { await badge.sendFrame(frame, SLOT.SCORES, { quiet: !show }); } catch {}
+  }
+  host.addEventListener('change', () => {
+    const sig = JSON.stringify(host.board), top = JSON.stringify(host.board[0] || null);
+    if (sig === scoresSig) return;
+    const record = top !== topSig && host.board.length > 0;
+    scoresSig = sig;
+    topSig = top;
+    sendScores(record);
+  });
+  setInterval(() => { if (scoresDue !== null) sendScores(scoresDue); }, 5000);
+
   return { sendInvite };
 }

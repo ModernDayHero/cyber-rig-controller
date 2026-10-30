@@ -44,6 +44,7 @@
         <span class="label">PASSWORD</span>
         <p class="invite-code" id="inviteCode">---</p>
         <span class="hint" id="inviteLeft"></span>
+        <button class="ghost send invite-badge" id="invitePush">PUSH TO BADGE<span class="bar" id="invitePushBar"></span></button>
         <a class="ghost send invite-open" id="inviteOpen" target="_blank" rel="noopener">OPEN GUEST PAGE</a>
         <div class="seg">
           <button id="inviteNew">NEW</button>
@@ -119,9 +120,10 @@
       <div class="view" id="view-badge" hidden>
         <div class="row">
           <span class="label">SHOW</span>
-          <div class="seg seg3" id="badgeKind">
+          <div class="seg seg4" id="badgeKind">
             <button data-kind="login">LOGIN QR</button>
             <button data-kind="card">CARD</button>
+            <button data-kind="scores">SCORES</button>
             <button data-kind="photo">PORTRAIT</button>
           </div>
         </div>
@@ -177,9 +179,10 @@
         <div class="seg badge-actions">
           <button class="send" id="badgeSend">SEND TO BADGE<span class="bar" id="badgeBar"></span></button>
         </div>
-        <div class="seg seg3 badge-actions">
-          <button id="badgeShowLogin">SHOW LOGIN</button>
-          <button id="badgeShowCard">SHOW CARD</button>
+        <div class="seg seg4 badge-actions">
+          <button id="badgeShowLogin">LOGIN</button>
+          <button id="badgeShowCard">CARD</button>
+          <button id="badgeShowScores">SCORES</button>
           <button id="badgeClear">CLEAR</button>
         </div>
       </div>
@@ -218,7 +221,21 @@
                 <button data-gate="open">FULL FROM START</button>
               </div>
             </div>
-            <span class="hint">PLAY FOR IT: guests win DEBUG for full access (patterns, HACK IT ALL, uploads), or ask you to skip it. FULL FROM START: everyone gets it on joining. FULL in the guest list grants it any time.</span>
+            <span class="hint">PLAY FOR IT: guests win DEBUG for full access (patterns, HACK IT ALL, driving, uploads), or ask you to skip it. FULL FROM START: everyone gets it on joining. PERMS in the guest list sets each guest's permissions any time.</span>
+            <div class="row">
+              <span class="label">TURN</span>
+              <div class="seg seg4" id="guestTurn"></div>
+            </div>
+            <div class="row">
+              <span class="label">RUNNERS</span>
+              <span class="hint" id="runnersCount">nobody yet</span>
+            </div>
+            <div class="runners" id="runnersList"></div>
+            <div class="seg">
+              <button id="runnersExport">EXPORT</button>
+              <button id="runnersClear">CLEAR LOG</button>
+            </div>
+            <span class="hint">Patterns, HACK IT ALL and driving go to one OPERATOR at a time for this long; the rest wait in line (DEBUG winners first, fastest on top) and can play meanwhile. NEXT ends a turn early.</span>
             <div class="seg">
               <button id="inviteBtn2">NEW INVITE</button>
               <button id="guestNewLink">NEW LINK</button>
@@ -482,6 +499,13 @@
             <div class="seg" id="driveOn">
               <button data-on="0">OFF</button>
               <button data-on="1">ON</button>
+            </div>
+          </div>
+          <div class="row">
+            <span class="label">GUESTS</span>
+            <div class="seg" id="driveGuests">
+              <button data-g="0">PARKED</button>
+              <button data-g="1">LET GUESTS DRIVE</button>
             </div>
           </div>
           <div class="row">

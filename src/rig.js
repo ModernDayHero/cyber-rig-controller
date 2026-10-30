@@ -362,6 +362,7 @@ export class Rig extends EventTarget {
   setDriving(on) {
     this.driving = on;
     if (on) this.bolt.stabilize();
+    this.dispatchEvent(new CustomEvent('change', { detail: this.state }));   // guests see DRIVE too
   }
 
   /** A library picture (library.js) everywhere: the phone sends the CLUE the picture

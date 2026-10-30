@@ -32,6 +32,7 @@ export function setupDrive(rig, $) {
 
   function release() {
     held = false;
+    rig.ownerHeld = false;
     x = y = 0;
     update();
   }
@@ -45,6 +46,7 @@ export function setupDrive(rig, $) {
   stick.addEventListener('pointerdown', (e) => {
     stick.setPointerCapture(e.pointerId);
     held = true;
+    rig.ownerHeld = true;                 // a guest at the wheel gives way (guests.js)
     if (tilt) zero = orient;              // hold = calibrate: the phone as it is now is "stopped"
     else fromPointer(e);
     update();

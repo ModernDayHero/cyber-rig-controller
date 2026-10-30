@@ -7,12 +7,13 @@
 //   slots 2-5  the last four guest portraits      a ring: a new one replaces the oldest
 //   slot 6     an invite: WANNA EDGERUN? + QR + a one-time password; stays up until the
 //              deck puts the login QR back (the password used, revoked or expired)
+//   slot 7     HIGH SCORES (DEBUG); the deck refreshes it quietly after each win
 //
 // Two ways to wear it (the deck sets it, kept in flash):
-//   WORN   a new portrait shows for `hold` seconds, then back to the login QR
-//   TABLE  photo frame: a slideshow, login QR -> each portrait -> login QR..., `hold`
-//          seconds each; a new portrait jumps the queue
-// Buttons: KEY 1 flips login QR <-> STEAMWorkz card; KEY 2 shows the next portrait.
+//   WORN   a new portrait (or the scores) shows for `hold` seconds, then the login QR
+//   TABLE  photo frame: a slideshow, login QR -> scores -> each portrait -> login QR...,
+//          `hold` seconds each; a new portrait jumps the queue
+// Buttons: KEY 1 steps login QR -> STEAMWorkz card -> scores; KEY 2 the next slide.
 //
 // Build (Arduino IDE):
 //   board    ESP32 Dev Module, PSRAM: Enabled, Partition: Huge APP (3MB No OTA/1MB SPIFFS)
@@ -20,7 +21,8 @@
 //            NimBLE-Arduino 2.x (Library Manager)
 //
 // BLE: advertises as RIG-BADGE, one service, two characteristics:
-//   RX (write)   'B' u32 len u8 slot (255 = next portrait) | 'D' data... | 'E'
+//   RX (write)   'B' u32 len u8 slot (255 = next portrait) [u8 flags: 1 = keep it, don't
+//                show it (unless it's on the panel now)] | 'D' data... | 'E'
 //                'S' u8 slot (show it) | 'M' u8 mode (0 worn, 1 table) u16 hold s
 //                'C' (clear the panel) | '?'
 //   TX (notify)  READY | OK | ERR <why> | INFO <w> <h> <battery mV> <slots bitmask> <mode> <hold> <showing>
@@ -41,15 +43,17 @@
 #define KEY_2        35
 #define FRAME_BYTES  (EPD_WIDTH * EPD_HEIGHT / 2)     // 259 200
 #define MAX_PACKED   (FRAME_BYTES + FRAME_BYTES / 128 + 16)
-#define SLOTS        7
+#define SLOTS        8
 #define FIRST_GUEST  2
 #define LAST_GUEST   5
 #define INVITE_SLOT  6
+#define SCORES_SLOT  7
 
 static uint8_t *frame;               // unpacked, what the panel shows (PSRAM)
 static uint8_t *packed;              // the incoming frame, still packed (PSRAM)
 static size_t packedLen = 0, packedGot = 0;
 static uint8_t packedSlot = 0;
+static bool packedQuiet = false;     // keep it in its slot without showing it
 static NimBLECharacteristic *tx;
 
 static uint8_t mode = 0;             // 0 worn, 1 table
@@ -111,10 +115,26 @@ static bool showSlot(int s) {
   return true;
 }
 
-/** Table mode's order: login, then each stored portrait, around again. */
+static bool isGuest(int s) { return s >= FIRST_GUEST && s <= LAST_GUEST; }
+
+/** Table mode's order: login, the scores, each stored portrait, around again. */
 static int nextSlide(int from) {
-  if (from < FIRST_GUEST || from > LAST_GUEST) from = FIRST_GUEST - 1;
+  if (from == SCORES_SLOT) from = FIRST_GUEST - 1;
+  else if (!isGuest(from)) {
+    if (hasSlot(SCORES_SLOT)) return SCORES_SLOT;
+    from = FIRST_GUEST - 1;
+  }
   for (int s = from + 1; s <= LAST_GUEST; s++) if (hasSlot(s)) return s;
+  return 0;
+}
+
+/** KEY 1: login QR -> card -> scores -> login QR (skipping any not saved yet). */
+static int nextScreen(int from) {
+  const int order[] = {0, 1, SCORES_SLOT};
+  int i = 0;
+  while (i < 3 && order[i] != from) i++;
+  if (i == 3) return 0;                  // from a portrait / an invite: back to login
+  for (int k = 1; k < 3; k++) if (hasSlot(order[(i + k) % 3])) return order[(i + k) % 3];
   return 0;
 }
 
@@ -134,6 +154,7 @@ class RxCallbacks : public NimBLECharacteristicCallbacks {
         if (n < 5) return say("ERR short");
         packedLen = d[1] | d[2] << 8 | d[3] << 16 | (uint32_t)d[4] << 24;
         packedSlot = n >= 6 ? d[5] : 0;
+        packedQuiet = n >= 7 && (d[6] & 1);
         packedGot = 0;
         if (packedLen == 0 || packedLen > MAX_PACKED) { packedLen = 0; return say("ERR size"); }
         if (packedSlot != 255 && packedSlot >= SLOTS) { packedLen = 0; return say("ERR slot"); }
@@ -236,9 +257,11 @@ void loop() {
       File f = LittleFS.open(slotPath(slot), "w");
       if (f) { f.write(packed, n); f.close(); }
       packedLen = 0;
-      draw();                            // whatever was just sent goes up straight away
-      showing = slot;
-      shownAt = millis();
+      if (!packedQuiet || showing == slot) {   // a quiet update still refreshes it if it's up
+        draw();                          // whatever was just sent goes up straight away
+        if (showing != slot) shownAt = millis();
+        showing = slot;
+      }
       say("OK");
     }
   }
@@ -278,7 +301,7 @@ void loop() {
   // The keys (active low; debounced by only acting on a fresh press).
   static bool k1Was = true, k2Was = true;
   bool k1 = digitalRead(KEY_1), k2 = digitalRead(KEY_2);
-  if (!k1 && k1Was) showSlot(showing == 0 && hasSlot(1) ? 1 : 0);
+  if (!k1 && k1Was) showSlot(nextScreen(showing));
   if (!k2 && k2Was) {
     int s = nextSlide(showing);
     if (s == 0) s = nextSlide(0);        // KEY 2 is for portraits: skip the login QR
@@ -290,7 +313,7 @@ void loop() {
   // Timing: WORN puts the login QR back after a portrait; TABLE moves the slideshow on.
   // An invite stays until the deck takes it down.
   if (showing >= 0 && showing != INVITE_SLOT && millis() - shownAt > (uint32_t)hold * 1000) {
-    if (mode == 0 && showing >= FIRST_GUEST && showing <= LAST_GUEST) showSlot(0);
+    if (mode == 0 && (isGuest(showing) || showing == SCORES_SLOT)) showSlot(0);
     else if (mode == 1) {
       int s = nextSlide(showing);
       if (s != showing) showSlot(s);

@@ -12,8 +12,22 @@
 //   A guest's handle + invite is their certificate until their time runs out, KICK or PWN:
 //   LEAVE (or a closed tab, lost signal) only marks them away, and their phone can come
 //   back on its own with the same token, access and all.
+//   drv: FULL ACCESS guests drive the BOLT while the owner has DRIVE on and LET GUESTS DRIVE:
+//   one at a time, at the owner's MAX, stopped if their messages stop for 1.5 s, and the
+//   owner's own stick always wins.
 //   skip: GET TO THE GOODZ (no game) -> GRANT / NO here. FULL (the guest list) grants it any
 //   time, and ACCESS = FULL FROM START (gate 'open') lets everyone in with full access.
+//
+// PERMISSIONS, per guest (PERMS in the guest list): patterns, hack, drive, up (their own
+// picture), say (words), pic (library pictures). GUEST access = say + pic; FULL = all.
+// TURNS: patterns, hack and drive are the OPERATOR's, one guest at a time for `turnSec`;
+// everyone else with those permissions waits in line (and can play DEBUG meanwhile).
+// The line goes round in rounds, a turn each; within a round DEBUG winners go first,
+// fastest time on top, then the rest in the order they joined. END TURN skips ahead.
+//
+// RUNNERS LOG (kept on this phone, SET -> GUESTS): everyone who jacked in, by phone: handle,
+// language, first / last seen, DEBUG wins, losses and best time, and the pictures they sent
+// (the last few each, marked shown or not). It outlives their certificates; CLEAR empties it.
 //
 // The link is ntfy.sh (no server of our own): guests post to the session topic, this app
 // listens to it (EventSource) and answers each guest on <topic>-<guest id>; rig news for
@@ -31,6 +45,8 @@ import { ascii } from './i18n.js';
 export const DEFAULT_RELAY = 'https://ntfy.sh';
 export const GUEST_MINUTES = [5, 10, 30, 60];
 const STORE_KEY = 'rig-guests';
+const RUNNERS_KEY = 'rig-runners';
+const RUNNER_PICS = 6;               // pictures kept per runner
 const GAP_MS = 1200;                 // a guest's actions, at most one this often
 const QUEUE_MAX = 12;                // waiting words / pictures; more are turned away
 const INVITE_MS = 15 * 60000;        // an unused password expires
@@ -39,6 +55,13 @@ const PAUSE_MS = 60000;              // ...for this long
 const GAME_GAP = 15000;              // one DEBUG result a guest this often
 const BREACH_GAP = 60000;            // a lost game lets the virus loose at most this often
 const BOARD_SIZE = 10;
+const DEADMAN_MS = 1500;             // a guest driver's messages stop: the BOLT stops
+const WHEEL_MS = 4000;               // the wheel is free again this long after the driver's last move
+export const TURN_SECS = [30, 60, 90, 120];
+export const PERMS = ['modes', 'hack', 'drive', 'up', 'say', 'pic'];
+const OP_PERMS = ['modes', 'hack', 'drive'];   // the operator's, one guest at a time
+const BASIC = { modes: false, hack: false, drive: false, up: false, say: true, pic: true };
+const ALL = Object.fromEntries(PERMS.map((p) => [p, true]));
 // No 0/O, 1/I/L, 2/Z, 5/S, 8/B: easy to read off a screen and type.
 const CODE_CHARS = 'ACDEFGHJKMNPQRTUVWXY34679';
 const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), (v) => CODE_CHARS[v % CODE_CHARS.length]).join('');
@@ -78,7 +101,12 @@ export class GuestHost extends EventTarget {
     this.open = false;
     // Guests in (a reload of this page keeps them) and passwords not used yet.
     this.guests = new Map((saved.guests || []).filter(([, x]) => x.until > Date.now()));
-    for (const x of this.guests.values()) x.last = 0;
+    for (const x of this.guests.values()) {
+      x.last = 0;
+      x.perms ||= { ...(x.full ? ALL : BASIC) };
+      x.since ||= Date.now();
+      x.rounds ||= 0;
+    }
     this.invites = (saved.invites || []).filter((v) => v.until > Date.now());   // { code, until }
     this.queue = [];                 // { n, g, kind: 'say' | 'up', text | pic }
     this._n = 0;
@@ -86,7 +114,12 @@ export class GuestHost extends EventTarget {
     this._pausedUntil = 0;
     this._breachAt = 0;
     this.board = saved.board || [];  // fastest DEBUG wins: { name, ms, saved }
+    try { this.runners = JSON.parse(localStorage.getItem(RUNNERS_KEY)) || {}; } catch { this.runners = {}; }
     this.gate = saved.gate === 'open' ? 'open' : 'game';   // 'game': play (or ask) for FULL
+    this.letDrive = false;           // LET GUESTS DRIVE (BOLT tab); never kept: a choice each time
+    this._wheel = null;              // { g, at }: the guest driving now
+    this.turnSec = TURN_SECS.includes(saved.turnSec) ? saved.turnSec : 60;
+    this.turn = null;                // { g, until }: the OPERATOR now
     if (saved.open) this.enable();
 
     // Firewall / virus news for every guest (their HACK IT ALL button follows it).
@@ -109,9 +142,32 @@ export class GuestHost extends EventTarget {
   }
 
   _save() {
-    const { topic, relay, open, minutes, invites, board, gate } = this;
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ topic, relay, open, minutes, invites, board, gate, guests: [...this.guests] })); } catch {}
+    const { topic, relay, open, minutes, invites, board, gate, turnSec } = this;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ topic, relay, open, minutes, invites, board, gate, turnSec, guests: [...this.guests] })); } catch {}
   }
+  /** This phone's runner record (made on first sight), kept current with their handle. */
+  _runner(g, x) {
+    const now = Date.now();
+    const r = this.runners[g] ||= { first: now, wins: 0, losses: 0, best: null, pics: [] };
+    Object.assign(r, { name: x.name, lang: x.lang, last: now });
+    return r;
+  }
+  _saveRunners() {
+    for (let tries = 0; tries < 20; tries++) {
+      try { localStorage.setItem(RUNNERS_KEY, JSON.stringify(this.runners)); return; } catch {}
+      // Storage full: drop the oldest picture anyone has, and try again.
+      const all = Object.values(this.runners).flatMap((r) => r.pics.map((p) => [r, p])).sort((a, b) => a[1].at - b[1].at);
+      if (!all.length) return;
+      all[0][0].pics.splice(all[0][0].pics.indexOf(all[0][1]), 1);
+    }
+  }
+  clearRunners() {
+    this.runners = {};
+    this.board = [];
+    this._saveRunners();
+    this._changed();
+  }
+
   _changed() {
     this._save();
     this.dispatchEvent(new Event('change'));
@@ -142,6 +198,7 @@ export class GuestHost extends EventTarget {
     this.guests.clear();
     this.invites = [];
     this.queue = [];
+    this.turn = null;
     this._changed();
   }
 
@@ -182,6 +239,101 @@ export class GuestHost extends EventTarget {
     return true;
   }
 
+  get canDrive() { return this.letDrive && !!this.rig.driving; }
+
+  /** LET GUESTS DRIVE on / off (only does anything while the owner has DRIVE on). */
+  setLetDrive(on) {
+    this.letDrive = !!on;
+    if (!on) this._parkGuest();
+    this._sendNews();
+    this._changed();
+  }
+
+  _parkGuest() {
+    clearTimeout(this._deadman);
+    if (this._wheel && this.rig.driving && !this.rig.ownerHeld) this.rig.bolt.drive(0, this._heading || 0);
+    this._wheel = null;
+  }
+
+  _drive(g, x, m) {
+    const deny = (why) => this._to(g, { t: 'deny', why });
+    if (!x.perms.drive) return deny('locked');
+    if (!this.canDrive) return deny('parked');
+    if (!this.isOp(g)) return deny('turn');
+    const now = Date.now();
+    if (this._wheel && this._wheel.g !== g && now < this._wheel.at + WHEEL_MS) return deny('wheel');
+    if (this.rig.ownerHeld) return;              // the owner has the stick
+    this._wheel = { g, at: now };
+    const s = Math.max(0, Math.min(1, Number(m.s) || 0));
+    this._heading = ((Math.round(Number(m.h) || 0) % 360) + 360) % 360;
+    let max = 40;
+    try { max = Number(localStorage.getItem('rig-drive-max')) || 40; } catch {}
+    this.rig.bolt.drive(255 * max / 100 * s, this._heading);
+    clearTimeout(this._deadman);
+    if (s > 0) this._deadman = setTimeout(() => this._parkGuest(), DEADMAN_MS);
+  }
+
+  // ---------- turns ----------
+  isOp(g) { return this.turn?.g === g; }
+  _canOperate(x) { return !x.away && OP_PERMS.some((p) => x.perms[p]); }
+
+  /** The line: who's up next, in order (not counting the operator). */
+  line() {
+    return [...this.guests].filter(([g, x]) => this._canOperate(x) && !this.isOp(g)).sort(([, a], [, b]) =>
+      a.rounds - b.rounds || (a.best ?? Infinity) - (b.best ?? Infinity) || a.since - b.since);
+  }
+
+  /** Hand the controls on when the turn is up (or now, with force). Quiet when nothing changes. */
+  _rotate(force = false) {
+    const now = Date.now(), cur = this.turn, curX = cur && this.guests.get(cur.g);
+    const valid = curX && this._canOperate(curX);
+    if (valid && now < cur.until && !force) return this._tellLine();
+    const next = this.line()[0];
+    if (!cur && !next) return;                   // nobody operating, nobody waiting
+    if (!next && valid) {                        // nobody waiting: the operator keeps going
+      cur.until = now + this.turnSec * 1000;
+      return this._tellLine();
+    }
+    if (curX) curX.rounds++;
+    if (cur) this._parkGuest();                  // a new driver: the BOLT stops first
+    this.turn = next ? { g: next[0], until: now + this.turnSec * 1000 } : null;
+    this._lineSig = '';
+    this._tellLine();
+    this._changed();
+  }
+
+  /** Tell everyone in the running where they stand, only when that changes. */
+  _tellLine() {
+    const line = this.line(), t = this.turn;
+    const sig = JSON.stringify([t?.g, t && Math.round(t.until / 1000), line.map(([g]) => g)]);
+    if (sig === this._lineSig) return;
+    this._lineSig = sig;
+    if (t) this._to(t.g, { t: 'turn', op: true, until: t.until });
+    const left = t ? Math.max(0, t.until - Date.now()) : 0;
+    line.forEach(([g], i) => this._to(g, { t: 'turn', op: false, pos: i + 1, eta: left + i * this.turnSec * 1000 }));
+  }
+
+  endTurn() { this._rotate(true); }
+
+  setTurnSec(s) {
+    this.turnSec = s;
+    if (this.turn) this.turn.until = Math.min(this.turn.until, Date.now() + s * 1000);
+    this._lineSig = '';
+    this._tellLine();
+    this._changed();
+  }
+
+  // ---------- permissions ----------
+  setPerm(g, perm, on) {
+    const x = this.guests.get(g);
+    if (!x || !PERMS.includes(perm)) return;
+    x.perms[perm] = !!on;
+    x.full = PERMS.every((p) => x.perms[p]);
+    this._to(g, { t: 'perms', perms: x.perms, full: x.full });
+    this._rotate();
+    this._changed();
+  }
+
   /** ACCESS: 'game' (play DEBUG, or ask to skip) or 'open' (FULL ACCESS from the start). */
   setGate(gate) {
     this.gate = gate === 'open' ? 'open' : 'game';
@@ -201,7 +353,7 @@ export class GuestHost extends EventTarget {
 
   _sendNews() {
     if (!this.open) return;
-    const s = this.rig.state, news = { t: 'news', fw: s.sandbox, hacked: s.hacked };
+    const s = this.rig.state, news = { t: 'news', fw: s.sandbox, hacked: s.hacked, drive: this.canDrive };
     const sig = JSON.stringify(news);
     if (sig === this._news) return;
     this._news = sig;
@@ -217,11 +369,13 @@ export class GuestHost extends EventTarget {
     if (!x || m.k !== x.token) return;          // not let in (or not them): ignored
     if (m.t === 'bye') {                         // LEAVE: away, the certificate still good
       x.away = true;
+      this._rotate();
       return this._changed();
     }
-    if (x.away) { x.away = false; this._changed(); }
+    if (x.away) { x.away = false; this._rotate(); this._changed(); }
     if (m.t === 'game') return this._game(m.g, x, m);
     if (m.t === 'gev') return this._live(m.g, x, m);
+    if (m.t === 'drv') return this._drive(m.g, x, m);
     if (m.t === 'skip') {                        // GET TO THE GOODZ: ask once, no game
       if (x.full || this.queue.some((q) => q.g === m.g && q.kind === 'skip')) return;
       if (this.gate === 'open') return this.grant(m.g);
@@ -231,7 +385,9 @@ export class GuestHost extends EventTarget {
     if (now < x.last + GAP_MS) return;
     x.last = now;
     const deny = (why) => this._to(m.g, { t: 'deny', why });
-    if (['mode', 'hack', 'up'].includes(m.t) && !x.full) return deny('locked');   // win DEBUG first
+    const need = { mode: 'modes', hack: 'hack', up: 'up', say: 'say', pic: 'pic' }[m.t];
+    if (need && !x.perms[need]) return deny('locked');                     // not theirs (yet)
+    if ((m.t === 'mode' || m.t === 'hack') && !this.isOp(m.g)) return deny('turn');   // wait in line
     switch (m.t) {
       case 'mode': {
         const set = SETS[m.set], i = m.i | 0;
@@ -258,7 +414,11 @@ export class GuestHost extends EventTarget {
       }
       case 'up': {
         const pic = checkPic(m);
-        if (pic) this._ask(m.g, { kind: 'up', pic: { ...pic, id: 'guest', caption: clean(m.caption, 20) } });
+        if (!pic) break;
+        const caption = clean(m.caption, 20), r = this._runner(m.g, x), n = this._n + 1;
+        r.pics = [...r.pics, { ...pic, caption, at: Date.now(), n, shown: null }].slice(-RUNNER_PICS);
+        this._saveRunners();
+        this._ask(m.g, { kind: 'up', pic: { ...pic, id: 'guest', caption } });
         break;
       }
     }
@@ -268,7 +428,9 @@ export class GuestHost extends EventTarget {
     if (x) {                                     // back (reload, TRY AGAIN, a rescan): same token
       if (m.k !== x.token) return;
       x.away = false;
-      this._to(g, { t: 'ok', k: x.token, until: x.until, name: x.name, full: !!x.full, gate: this.gate });
+      this._to(g, { t: 'ok', k: x.token, until: x.until, name: x.name, full: !!x.full, perms: x.perms, gate: this.gate });
+      this._lineSig = '';
+      this._rotate();
       return this._changed();
     }
     // Coming back with a certificate we don't hold any more (time up, KICK, PWN): no
@@ -288,9 +450,14 @@ export class GuestHost extends EventTarget {
       name: handle(m.name) || 'GUEST',
       lang: LANG_CODES.includes(m.lang) ? m.lang : 'en',
       code, until: now + this.minutes * 60000, token: rand(16), last: 0, full: this.gate === 'open', lastGame: 0,
+      perms: { ...(this.gate === 'open' ? ALL : BASIC) }, since: now, rounds: 0, best: null,
     };
     this.guests.set(g, guest);
-    this._to(g, { t: 'ok', k: guest.token, until: guest.until, name: guest.name, full: guest.full, gate: this.gate });
+    const r = this._runner(g, guest);
+    guest.best = r.best;                         // a returning winner keeps their place in line
+    this._saveRunners();
+    this._to(g, { t: 'ok', k: guest.token, until: guest.until, name: guest.name, full: guest.full, perms: guest.perms, gate: this.gate });
+    this._rotate();
     this._news = '';
     this._sendNews();                            // so they know the firewall state
     this._buzz();
@@ -333,9 +500,16 @@ export class GuestHost extends EventTarget {
     x.lastGame = now;
     const tag = clean(x.name, 12) || 'RUNNER';
     if (this.live?.g === g) this.live = null;
+    const r = this._runner(g, x);
+    if (m.won) { r.wins++; r.best = Math.min(r.best ?? Infinity, ms); } else r.losses++;
+    this._saveRunners();
     if (m.won) {
       x.full = true;
-      this._to(g, { t: 'full' });
+      x.perms = { ...ALL };
+      x.best = Math.min(x.best ?? Infinity, ms);
+      this._to(g, { t: 'full', perms: x.perms });
+      this._lineSig = '';
+      this._rotate();
       const record = !this.board.length || ms < this.board[0].ms;
       this.board = [...this.board, { name: x.name, ms, saved }].sort((a, b) => a.ms - b.ms).slice(0, BOARD_SIZE);
       if (this.rig.locked) this.rig.purge();     // debugging the rig fixes the rig
@@ -367,8 +541,10 @@ export class GuestHost extends EventTarget {
     const x = this.guests.get(g);
     if (!x || x.full) return;
     x.full = true;
+    x.perms = { ...ALL };
     this.queue = this.queue.filter((q) => !(q.g === g && q.kind === 'skip'));
-    this._to(g, { t: 'full' });
+    this._to(g, { t: 'full', perms: x.perms });
+    this._rotate();
     this._changed();
   }
 
@@ -378,6 +554,8 @@ export class GuestHost extends EventTarget {
     if (why !== 'left') this._to(g, { t: 'end', why });
     this.guests.delete(g);
     this.queue = this.queue.filter((q) => q.g !== g);
+    if (this.isOp(g)) this._rotate(true);
+    else this._tellLine();
     this._changed();
   }
 
@@ -401,6 +579,10 @@ export class GuestHost extends EventTarget {
         else this.rig.sayText(text);
       }
     }
+    if (q.kind === 'up') {
+      const p = this.runners[q.g]?.pics.find((v) => v.n === q.n);
+      if (p) { p.shown = yes; this._saveRunners(); }
+    }
     this._to(q.g, { t: 'res', kind: q.kind, ok: yes });
     this._changed();
   }
@@ -416,6 +598,7 @@ export class GuestHost extends EventTarget {
     const now = Date.now();
     if (this.live && now > this.live.at + 60000) this.live = null;   // a game left mid-way
     for (const [g, x] of this.guests) if (now > x.until) this.kick(g, 'time');
+    if (this.open) this._rotate();               // a turn that's run out goes to the next in line
     const n = this.invites.length;
     this.invites = this.invites.filter((v) => v.until > now);
     if (this.invites.length !== n) this._changed();
