@@ -1,0 +1,14 @@
+# Guest relay for the Cyber Deck (docs/relay-worker.md).
+name = "cyber-rig-relay"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# One Durable Object per guest session: every topic of a session meets in it.
+[[durable_objects.bindings]]
+name = "SESSIONS"
+class_name = "Session"
+
+# SQLite-backed Durable Objects are the kind the Workers Free plan allows.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Session"]

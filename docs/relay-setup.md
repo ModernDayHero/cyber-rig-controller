@@ -1,5 +1,9 @@
 # Guest relay: self-hosted ntfy on the NAS
 
+> **Recommended instead: `docs/relay-worker.md`.** That relay runs entirely on Cloudflare
+> Workers: nothing at home exposed, nothing to keep running. This page stays as the
+> self-hosted alternative.
+
 The Cyber Deck's guest mode needs a relay: a small server that passes messages between
 guests' phones and your phone. Everything works with the public **ntfy.sh**, but its free
 tier stops after a daily message quota. On 2026-10-30, one day of testing was enough to
