@@ -328,7 +328,8 @@ output { width: 44px; text-align: right; font-size: 13px; }
 .gperms button.all { color: var(--ok); border-color: var(--ok); }
 .gboard { font-size: 11px; letter-spacing: 0.08em; color: var(--dim); padding-top: 4px; border-top: 1px solid var(--line); }
 .gitem .pwn { background: var(--bad); border: 0; color: #000; }
-.gitem.pending .who { color: #00e5ff; font-weight: 700; letter-spacing: 0.1em; }
+.gitem.pending .who { color: #00e5ff; font-weight: 700; letter-spacing: 0.1em; cursor: pointer; }
+.gitem.pending .who::after { content: ' ⤢'; font-weight: 400; opacity: 0.6; }
 .invite-head { margin: 0; text-align: center; font-weight: 700; letter-spacing: 0.2em; color: #00e5ff; }
 .invite-code { margin: 0; text-align: center; font-size: 44px; font-weight: 700; letter-spacing: 0.14em; color: #fff; text-shadow: 0 0 14px #00e5ff; }
 .invite-badge { width: 100%; padding: 12px 0; color: #00e5ff; border-color: #00e5ff; font-weight: 700; letter-spacing: 0.1em; }

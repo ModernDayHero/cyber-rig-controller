@@ -552,8 +552,9 @@ GUEST_MINUTES.forEach((m) => {
   $('guestTime').append(b);
 });
 let shownInvite = null;
-function openInvite() {
-  shownInvite = host.invite();
+// A new password (INVITE / NEW), or one still waiting (tap its PASS row) shown again.
+function openInvite(again) {
+  shownInvite = again && host.invites.includes(again) ? again : host.invite();
   const qr = qrcode(0, 'M');
   qr.addData(host.link);
   qr.make();
@@ -588,9 +589,9 @@ function tickInvite() {
     : `one phone · valid ${mmss(shownInvite.until - Date.now())}`;
   $('invite').classList.toggle('used', used);
 }
-$('inviteBtn').addEventListener('click', openInvite);
-$('inviteBtn2').addEventListener('click', openInvite);
-$('inviteNew').addEventListener('click', openInvite);
+$('inviteBtn').addEventListener('click', () => openInvite());
+$('inviteBtn2').addEventListener('click', () => openInvite());
+$('inviteNew').addEventListener('click', () => openInvite());
 segPick('guestGate', 'gate', (v) => host.setGate(v));
 segPick('driveGuests', 'g', (v) => host.setLetDrive(v === '1'));
 $('guestRelay').value = host.relay;
@@ -672,6 +673,10 @@ function renderGuests() {
   const rows = [];
   for (const v of host.invites) {
     const r = gItem('pending', `PASS ${showCode(v.code)}`, left(v.until), ['REVOKE', 'ghost', () => host.revokeInvite(v.code)]);
+    const who = r.querySelector('.who');           // tap it: its WANNA EDGERUN? again (and to the badge)
+    who.setAttribute('role', 'button');
+    who.title = 'Show this invite again';
+    who.addEventListener('click', () => openInvite(v));
     r.dataset.until = v.until;
     rows.push(r);
   }
