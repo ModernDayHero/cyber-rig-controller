@@ -1,0 +1,4 @@
+[
+  { "name": "MOTOR A", "type": "scmd", "motor": 0, "max": 100, "min": 25, "kick": 150 },
+  { "name": "MOTOR B", "type": "scmd", "motor": 1, "max": 100, "min": 25, "kick": 150 }
+]

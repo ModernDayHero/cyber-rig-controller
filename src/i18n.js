@@ -1,4 +1,4 @@
-// The guest page's words in the five languages of the party. Picked on the consent
+// The guest page's words in the five languages of the party, in two styles (see STYLES). Picked on the consent
 // screen (first guess: the phone's own language) and kept for the whole visit, PWN and
 // its reveal included. Drafts: have a native speaker read each one before an event.
 // Mode names and the big I PWNED YOU stay English (Night City signage), with the
@@ -14,6 +14,21 @@ export const LANGS = [
 
 const T = {
   en: {
+    denyMotors: "The motors are off right now.",
+    motorsTitle: "MOTORS",
+    motorsHint: "Slide to move, hold an arrow to run. Let go and it stops.",
+    canTitle: "YOU CAN NOW",
+    readyTag: "READY",
+    replayHint: "Play again to set a faster time on the high scores.",
+    can: {"modes": "LIGHTS", "hack": "VIRUS", "drive": "DRIVE BOLT", "motors": "MOTORS", "say": "WORDS", "pic": "PICTURES", "up": "UPLOAD"},
+    whoTitle: "WHO'S JACKING IN?",
+    returning: "RETURNING: {name}",
+    newGuest: "NEW GUEST",
+    codeHelp: "It's on the badge.",
+    codeLabel: "ACCESS CODE",
+    handleLabel: "YOUR HANDLE / NAME",
+    next: "NEXT",
+    agree: "I AGREE",
     relayBusy: "The rig's relay refused that (busy or down). Try again in a moment.",
     opYou: "YOU'RE THE OPERATOR",
     inLine: "IN LINE #{n} · about {t}",
@@ -21,7 +36,6 @@ const T = {
     waitTurn: "Wait for your turn as operator.",
     driveTitle: "DRIVE THE BOLT",
     driveHint: "Hold and drag. Let go to stop. It lags a little: go easy.",
-    denyWheel: "Someone else has the wheel. Try again in a few seconds.",
     denyParked: "The BOLT is parked right now.",
     pwnBounce: "> BUG.EXE bounced back at you",
     skipBtn: "GET TO THE GOODZ",
@@ -64,16 +78,16 @@ const T = {
       e: "buzzing neon sign",
       o: "heats up as you move",
     },
-    intro: 'Open port found on the STEAMWorkz rig. Invite only: the netrunner wearing it gives you a password.',
+    intro: "Open port found on the STEAMWorkz rig. Invite only: the netrunner wearing it has your access code.",
     handle: 'your handle / name',
-    password: 'PASSWORD',
+    password: "ACCESS CODE",
     consent: "I'm in for the game: the rig may show my handle, and pranks happen (only on this page).",
     jackIn: 'JACK IN',
     handshake: 'HANDSHAKE SENT',
-    checking: 'Checking your password…',
+    checking: "Checking your access code…",
     noAnswer: 'No answer. The port may be closed, or the rig is out of signal.',
-    denied: 'ACCESS DENIED: wrong or used password. Ask for a fresh one.',
-    pause: 'Too many wrong passwords. The port is cooling down: try again in a minute.',
+    denied: "ACCESS DENIED: wrong or used access code. Ask for a fresh one.",
+    pause: "Too many wrong codes. The port is cooling down: try again in a minute.",
     access: 'ACCESS',
     leave: 'LEAVE',
     hackAll: 'HACK IT ALL',
@@ -118,6 +132,21 @@ const T = {
     },
   },
   ko: {
+    denyMotors: "지금은 모터가 꺼져 있어요.",
+    motorsTitle: "모터",
+    motorsHint: "슬라이드하면 움직이고, 화살표를 누르고 있으면 돌아가요. 손을 떼면 멈춰요.",
+    canTitle: "지금 할 수 있어요",
+    readyTag: "사용 가능",
+    replayHint: "다시 플레이해서 최고 기록에 도전하세요.",
+    can: {"modes": "조명", "hack": "바이러스", "drive": "볼트 운전", "motors": "모터", "say": "단어", "pic": "그림", "up": "업로드"},
+    whoTitle: "누가 접속하나요?",
+    returning: "돌아온 게스트: {name}",
+    newGuest: "새 게스트",
+    codeHelp: "배지에 있어요.",
+    codeLabel: "접속 코드",
+    handleLabel: "닉네임 / 이름",
+    next: "다음",
+    agree: "동의합니다",
     relayBusy: "리그의 릴레이가 요청을 거절했어요 (혼잡하거나 중단됨). 잠시 후 다시 시도하세요.",
     opYou: "지금 당신이 오퍼레이터",
     inLine: "대기 #{n} · 약 {t}",
@@ -125,7 +154,6 @@ const T = {
     waitTurn: "오퍼레이터 차례를 기다리세요.",
     driveTitle: "볼트 운전",
     driveHint: "누른 채로 드래그하세요. 손을 떼면 멈춰요. 약간 지연돼요: 살살.",
-    denyWheel: "다른 사람이 운전 중이에요. 잠시 후 다시 시도하세요.",
     denyParked: "지금은 볼트가 주차 중이에요.",
     pwnBounce: "> BUG.EXE가 당신에게 튕겨 나왔어요",
     skipBtn: "건너뛰고 바로 즐기기",
@@ -168,16 +196,16 @@ const T = {
       e: "지직거리는 네온사인",
       o: "움직일수록 뜨거워짐",
     },
-    intro: 'STEAMWorkz 리그에서 열린 포트를 발견했습니다. 초대 전용: 리그를 입은 넷러너에게 비밀번호를 받으세요.',
+    intro: "STEAMWorkz 리그에서 열린 포트를 발견했습니다. 초대 전용: 리그를 입은 넷러너가 접속 코드를 알려줘요.",
     handle: '닉네임 / 이름',
-    password: '비밀번호',
+    password: "접속 코드",
     consent: '게임에 참여합니다: 리그에 내 닉네임이 표시될 수 있고, 장난이 있을 수 있어요 (이 페이지에서만).',
     jackIn: '접속',
     handshake: '핸드셰이크 전송됨',
-    checking: '비밀번호 확인 중…',
+    checking: "접속 코드 확인 중…",
     noAnswer: '응답이 없습니다. 포트가 닫혔거나 리그 신호가 약합니다.',
-    denied: '접근 거부: 잘못되었거나 이미 사용된 비밀번호입니다. 새 비밀번호를 받으세요.',
-    pause: '비밀번호 오류가 너무 많습니다. 1분 후에 다시 시도하세요.',
+    denied: "접근 거부: 잘못되었거나 이미 사용된 접속 코드입니다. 새 코드를 받으세요.",
+    pause: "코드 오류가 너무 많습니다. 1분 후에 다시 시도하세요.",
     access: '남은 시간',
     leave: '나가기',
     hackAll: '전부 해킹',
@@ -222,6 +250,21 @@ const T = {
     },
   },
   ja: {
+    denyMotors: "今モーターはオフです。",
+    motorsTitle: "モーター",
+    motorsHint: "スライドで動かし、矢印を押している間だけ回ります。離すと止まります。",
+    canTitle: "今できること",
+    readyTag: "OK",
+    replayHint: "もう一度プレイしてハイスコアの記録更新を狙おう。",
+    can: {"modes": "ライト", "hack": "ウイルス", "drive": "BOLT運転", "motors": "モーター", "say": "言葉", "pic": "ピクチャー", "up": "アップロード"},
+    whoTitle: "誰がジャックインする？",
+    returning: "おかえり：{name}",
+    newGuest: "新しいゲスト",
+    codeHelp: "バッジに表示されています。",
+    codeLabel: "アクセスコード",
+    handleLabel: "ハンドルネーム／名前",
+    next: "次へ",
+    agree: "同意する",
     relayBusy: "リグの中継サーバーが拒否しました（混雑か停止中）。少ししてからもう一度どうぞ。",
     opYou: "あなたがオペレーター",
     inLine: "待機 #{n} · あと約{t}",
@@ -229,7 +272,6 @@ const T = {
     waitTurn: "オペレーターの順番を待ってください。",
     driveTitle: "BOLTを運転",
     driveHint: "押したままドラッグ。離すと止まります。少し遅れるので、ゆっくりね。",
-    denyWheel: "他の人が運転中です。数秒後にもう一度どうぞ。",
     denyParked: "今BOLTは駐車中です。",
     pwnBounce: "> BUG.EXEがあなたに跳ね返った",
     skipBtn: "スキップしてお楽しみへ",
@@ -272,16 +314,16 @@ const T = {
       e: "ジジッと鳴るネオンサイン",
       o: "動くほど熱くなる",
     },
-    intro: 'STEAMWorkzリグの開いたポートを発見。招待制：リグを着ているネットランナーからパスワードをもらってください。',
+    intro: "STEAMWorkzリグの開いたポートを発見。招待制：リグを着ているネットランナーがアクセスコードを持っています。",
     handle: 'ハンドルネーム／名前',
-    password: 'パスワード',
+    password: "アクセスコード",
     consent: 'ゲームに参加します：リグに自分のハンドルネームが表示されることがあり、いたずらもあります（このページの中だけ）。',
     jackIn: 'ジャックイン',
     handshake: 'ハンドシェイク送信',
-    checking: 'パスワードを確認中…',
+    checking: "アクセスコードを確認中…",
     noAnswer: '応答なし。ポートが閉じているか、リグの電波が届いていません。',
-    denied: 'アクセス拒否：パスワードが違うか、使用済みです。新しいものをもらってください。',
-    pause: 'パスワードの誤りが多すぎます。1分後にもう一度どうぞ。',
+    denied: "アクセス拒否：コードが違うか、使用済みです。新しいコードをもらってください。",
+    pause: "コードの誤りが多すぎます。1分後にもう一度どうぞ。",
     access: '残り時間',
     leave: '退出',
     hackAll: '全部ハック',
@@ -326,6 +368,21 @@ const T = {
     },
   },
   'zh-TW': {
+    denyMotors: "馬達現在關閉中。",
+    motorsTitle: "馬達",
+    motorsHint: "滑動來移動，按住箭頭就會轉動。放開就停。",
+    canTitle: "現在可以",
+    readyTag: "可用",
+    replayHint: "再玩一次，挑戰高分榜上更快的時間。",
+    can: {"modes": "燈光", "hack": "病毒", "drive": "駕駛 BOLT", "motors": "馬達", "say": "文字", "pic": "圖片", "up": "上傳"},
+    whoTitle: "誰要接入？",
+    returning: "回來的訪客：{name}",
+    newGuest: "新訪客",
+    codeHelp: "就在徽章上。",
+    codeLabel: "存取碼",
+    handleLabel: "你的代號／名字",
+    next: "下一步",
+    agree: "我同意",
     relayBusy: "裝備的中繼伺服器拒絕了（忙碌或離線）。請稍後再試。",
     opYou: "輪到你當操作員",
     inLine: "排隊第 {n} 位 · 約 {t}",
@@ -333,7 +390,6 @@ const T = {
     waitTurn: "請等輪到你當操作員。",
     driveTitle: "駕駛 BOLT",
     driveHint: "按住拖動，放開就停。會有一點延遲，慢慢來。",
-    denyWheel: "有人正在駕駛，請過幾秒再試。",
     denyParked: "BOLT 現在停著。",
     pwnBounce: "> BUG.EXE 反彈到你身上",
     skipBtn: "跳過，直接開玩",
@@ -376,16 +432,16 @@ const T = {
       e: "滋滋作響的霓虹招牌",
       o: "越動越熱",
     },
-    intro: '在 STEAMWorkz 裝備上發現開放的連接埠。僅限邀請：向穿著它的網路行者索取密碼。',
+    intro: "在 STEAMWorkz 裝備上發現開放的連接埠。僅限邀請：穿著它的網路行者會給你存取碼。",
     handle: '你的代號／名字',
-    password: '密碼',
+    password: "存取碼",
     consent: '我加入遊戲：裝備可能會顯示我的代號，也可能有惡作劇（只發生在這個網頁上）。',
     jackIn: '接入',
     handshake: '已送出握手',
-    checking: '正在驗證密碼…',
+    checking: "正在驗證存取碼…",
     noAnswer: '沒有回應。連接埠可能已關閉，或裝備訊號不佳。',
-    denied: '拒絕存取：密碼錯誤或已被使用。請索取新的密碼。',
-    pause: '密碼錯誤次數過多。請一分鐘後再試。',
+    denied: "拒絕存取：存取碼錯誤或已被使用。請索取新的存取碼。",
+    pause: "存取碼錯誤次數過多。請一分鐘後再試。",
     access: '剩餘時間',
     leave: '離開',
     hackAll: '全部駭入',
@@ -430,6 +486,21 @@ const T = {
     },
   },
   vi: {
+    denyMotors: "Động cơ đang tắt.",
+    motorsTitle: "ĐỘNG CƠ",
+    motorsHint: "Trượt để di chuyển, giữ mũi tên để chạy. Thả ra là dừng.",
+    canTitle: "BẠN CÓ THỂ",
+    readyTag: "SẴN SÀNG",
+    replayHint: "Chơi lại để lập thời gian nhanh hơn trên bảng điểm.",
+    can: {"modes": "ĐÈN", "hack": "VIRUS", "drive": "LÁI BOLT", "motors": "ĐỘNG CƠ", "say": "CHỮ", "pic": "HÌNH", "up": "TẢI ẢNH"},
+    whoTitle: "AI ĐANG KẾT NỐI?",
+    returning: "KHÁCH QUAY LẠI: {name}",
+    newGuest: "KHÁCH MỚI",
+    codeHelp: "Mã có trên huy hiệu.",
+    codeLabel: "MÃ TRUY CẬP",
+    handleLabel: "BIỆT DANH / TÊN",
+    next: "TIẾP",
+    agree: "TÔI ĐỒNG Ý",
     relayBusy: "Máy chuyển tiếp của bộ đồ từ chối (đang bận hoặc ngừng). Thử lại sau chút nữa.",
     opYou: "BẠN ĐANG ĐIỀU KHIỂN",
     inLine: "XẾP HÀNG #{n} · khoảng {t}",
@@ -437,7 +508,6 @@ const T = {
     waitTurn: "Chờ đến lượt bạn điều khiển.",
     driveTitle: "LÁI BOLT",
     driveHint: "Giữ và kéo. Thả ra để dừng. Hơi trễ một chút: lái nhẹ thôi.",
-    denyWheel: "Người khác đang cầm lái. Thử lại sau vài giây.",
     denyParked: "BOLT đang đỗ.",
     pwnBounce: "> BUG.EXE dội ngược vào bạn",
     skipBtn: "BỎ QUA, VÀO LUÔN",
@@ -480,16 +550,16 @@ const T = {
       e: "biển neon rè rè",
       o: "càng di chuyển càng nóng",
     },
-    intro: 'Phát hiện cổng mở trên bộ đồ STEAMWorkz. Chỉ dành cho khách mời: hãy xin mật khẩu từ netrunner đang mặc nó.',
+    intro: "Phát hiện cổng mở trên bộ đồ STEAMWorkz. Chỉ dành cho khách mời: netrunner đang mặc nó có mã truy cập của bạn.",
     handle: 'biệt danh / tên của bạn',
-    password: 'MẬT KHẨU',
+    password: "MÃ TRUY CẬP",
     consent: 'Tôi tham gia trò chơi: bộ đồ có thể hiện biệt danh của tôi, và có thể có trò đùa (chỉ trên trang này).',
     jackIn: 'KẾT NỐI',
     handshake: 'ĐÃ GỬI BẮT TAY',
-    checking: 'Đang kiểm tra mật khẩu…',
+    checking: "Đang kiểm tra mã truy cập…",
     noAnswer: 'Không có phản hồi. Cổng có thể đã đóng, hoặc bộ đồ mất sóng.',
-    denied: 'TỪ CHỐI TRUY CẬP: mật khẩu sai hoặc đã được dùng. Hãy xin mật khẩu mới.',
-    pause: 'Nhập sai quá nhiều lần. Hãy thử lại sau một phút.',
+    denied: "TỪ CHỐI TRUY CẬP: mã sai hoặc đã được dùng. Hãy xin mã mới.",
+    pause: "Nhập sai quá nhiều lần. Hãy thử lại sau một phút.",
     access: 'THỜI GIAN',
     leave: 'RỜI ĐI',
     hackAll: 'HACK TẤT CẢ',
@@ -546,10 +616,179 @@ export function guessLang(list = navigator.languages || [navigator.language]) {
   return 'en';
 }
 
-/** Words for `lang` (missing ones fall back to English). */
-export function words(lang) {
-  const t = T[lang] || T.en;
-  return new Proxy(t, { get: (o, k) => o[k] ?? T.en[k] });
+// Two ways to say it: PLAIN (the default: everyday words, for anyone) and NIGHT CITY (the
+// Cyberpunk lingo above: jack in, netrunner, choom, PWNED), picked on the guest page.
+// PLAIN only lists what it says differently; the rest is shared.
+export const STYLES = ['plain', 'night'];
+const PLAIN = {
+  "en": {
+    "styleName": "PLAIN",
+    "intro": "Welcome to the STEAMWorkz light-up costume! Ask the person wearing it for an access code to join in.",
+    "jackIn": "JOIN",
+    "handshake": "CONNECTING…",
+    "stKnocking": "CONNECTING",
+    "stIn": "CONNECTED",
+    "stOffline": "NOT CONNECTED",
+    "noAnswer": "No answer. Guest mode may be off, or the costume is out of signal.",
+    "whoTitle": "WHO IS JOINING?",
+    "returning": "CONTINUE AS {name}",
+    "newGuest": "I'M SOMEONE NEW",
+    "fullGranted": "Full access unlocked. Enjoy!",
+    "debugHint": "Win the mini game to unlock everything. Lose, and the bug might hack the costume, or prank you.",
+    "denied": "That code is wrong or already used. Ask for a new one.",
+    "opYou": "IT'S YOUR TURN",
+    "end": {
+      "pwned": [
+        "GOTCHA!",
+        "That was just a prank on this web page. Your phone is fine. Thanks for playing!"
+      ],
+      "closed": [
+        "GUEST MODE CLOSED",
+        "The owner turned guest mode off."
+      ],
+      "kicked": [
+        "DISCONNECTED",
+        "The owner ended your session."
+      ],
+      "gone": [
+        "ACCESS EXPIRED",
+        "Your access ran out or was cancelled. Ask for a new code."
+      ]
+    }
+  },
+  "ko": {
+    "styleName": "쉬운 말",
+    "intro": "STEAMWorkz 빛나는 코스튬에 오신 걸 환영해요! 착용한 사람에게 접속 코드를 받아 참여하세요.",
+    "jackIn": "참여하기",
+    "handshake": "연결 중…",
+    "stKnocking": "연결 중",
+    "stIn": "연결됨",
+    "stOffline": "연결 안 됨",
+    "noAnswer": "응답이 없어요. 게스트 모드가 꺼져 있거나 코스튬 신호가 약해요.",
+    "whoTitle": "누가 참여하나요?",
+    "returning": "{name}(으)로 계속하기",
+    "newGuest": "처음이에요",
+    "fullGranted": "모든 기능이 열렸어요. 즐기세요!",
+    "debugHint": "미니 게임에서 이기면 모든 기능이 열려요. 지면 버그가 코스튬을 해킹하거나 장난을 칠 수도 있어요.",
+    "denied": "코드가 틀렸거나 이미 사용됐어요. 새 코드를 받으세요.",
+    "opYou": "내 차례예요",
+    "end": {
+      "pwned": [
+        "장난이었어요!",
+        "이 웹페이지에서만 일어난 장난이에요. 휴대폰은 멀쩡해요. 함께해 줘서 고마워요!"
+      ],
+      "closed": [
+        "게스트 모드 종료",
+        "주인이 게스트 모드를 껐어요."
+      ],
+      "kicked": [
+        "연결 끊김",
+        "주인이 세션을 종료했어요."
+      ]
+    }
+  },
+  "ja": {
+    "styleName": "ふつう",
+    "intro": "STEAMWorkzの光るコスチュームへようこそ！着ている人からアクセスコードをもらって参加してね。",
+    "jackIn": "参加する",
+    "handshake": "接続中…",
+    "stKnocking": "接続中",
+    "stIn": "接続済み",
+    "stOffline": "未接続",
+    "noAnswer": "応答がありません。ゲストモードがオフか、コスチュームの電波が届いていません。",
+    "whoTitle": "誰が参加しますか？",
+    "returning": "{name}として続ける",
+    "newGuest": "はじめて参加",
+    "fullGranted": "全機能が解放されました。楽しんでね！",
+    "debugHint": "ミニゲームに勝つと全機能が解放。負けるとバグがコスチュームをハックするか、あなたにいたずらするかも。",
+    "denied": "コードが違うか、使用済みです。新しいコードをもらってください。",
+    "opYou": "あなたの番です",
+    "end": {
+      "pwned": [
+        "いたずらでした！",
+        "このウェブページだけのいたずらです。スマホは無事です。遊んでくれてありがとう！"
+      ],
+      "closed": [
+        "ゲストモード終了",
+        "オーナーがゲストモードをオフにしました。"
+      ],
+      "kicked": [
+        "切断",
+        "オーナーがセッションを終了しました。"
+      ]
+    }
+  },
+  "zh-TW": {
+    "styleName": "一般",
+    "intro": "歡迎來到 STEAMWorkz 發光服裝！向穿著它的人索取存取碼就能加入。",
+    "jackIn": "加入",
+    "handshake": "連線中…",
+    "stKnocking": "連線中",
+    "stIn": "已連線",
+    "stOffline": "未連線",
+    "noAnswer": "沒有回應。訪客模式可能已關閉，或服裝訊號不佳。",
+    "whoTitle": "是誰要加入？",
+    "returning": "以 {name} 繼續",
+    "newGuest": "我是新來的",
+    "fullGranted": "全部功能已解鎖，玩得開心！",
+    "debugHint": "贏得小遊戲就能解鎖全部功能。輸了的話，蟲子可能會駭進服裝，或捉弄你。",
+    "denied": "存取碼錯誤或已被使用。請索取新的存取碼。",
+    "opYou": "輪到你了",
+    "end": {
+      "pwned": [
+        "開玩笑的！",
+        "這只是這個網頁上的惡作劇，你的手機完全沒事。謝謝參與！"
+      ],
+      "closed": [
+        "訪客模式已關閉",
+        "主人關閉了訪客模式。"
+      ],
+      "kicked": [
+        "已斷線",
+        "主人結束了你的連線。"
+      ]
+    }
+  },
+  "vi": {
+    "styleName": "THƯỜNG",
+    "intro": "Chào mừng đến với bộ đồ phát sáng STEAMWorkz! Hãy xin người đang mặc mã truy cập để tham gia.",
+    "jackIn": "THAM GIA",
+    "handshake": "ĐANG KẾT NỐI…",
+    "stKnocking": "ĐANG KẾT NỐI",
+    "stIn": "ĐÃ KẾT NỐI",
+    "stOffline": "CHƯA KẾT NỐI",
+    "noAnswer": "Không có phản hồi. Chế độ khách có thể đang tắt, hoặc bộ đồ mất sóng.",
+    "whoTitle": "AI ĐANG THAM GIA?",
+    "returning": "TIẾP TỤC LÀ {name}",
+    "newGuest": "TÔI LÀ NGƯỜI MỚI",
+    "fullGranted": "Đã mở khóa toàn bộ. Chơi vui nhé!",
+    "debugHint": "Thắng trò chơi nhỏ để mở khóa mọi thứ. Thua thì con bug có thể hack bộ đồ, hoặc trêu bạn.",
+    "denied": "Mã sai hoặc đã được dùng. Hãy xin mã mới.",
+    "opYou": "ĐẾN LƯỢT BẠN",
+    "end": {
+      "pwned": [
+        "ĐÙA THÔI!",
+        "Đó chỉ là trò đùa trên trang web này. Điện thoại của bạn vẫn ổn. Cảm ơn đã chơi!"
+      ],
+      "closed": [
+        "ĐÃ ĐÓNG CHẾ ĐỘ KHÁCH",
+        "Chủ nhân đã tắt chế độ khách."
+      ],
+      "kicked": [
+        "ĐÃ NGẮT KẾT NỐI",
+        "Chủ nhân đã kết thúc phiên của bạn."
+      ]
+    }
+  }
+};
+
+/** Words for `lang` in `style` ('plain' or 'night'; missing ones fall back to English). */
+export function words(lang, style = 'night') {
+  const t = T[lang] || T.en, p = style === 'plain' ? PLAIN[lang] || PLAIN.en : {};
+  const pick = (k) => p[k] ?? t[k] ?? (style === 'plain' ? PLAIN.en[k] : undefined) ?? T.en[k];
+  return new Proxy({}, {
+    get: (_, k) => (k === 'end' ? { ...T.en.end, ...t.end, ...(p.end || {}) } : pick(k)),
+  });
 }
 
 /** Text for the rig's English-only screens: accents off (Nguyễn -> Nguyen), other

@@ -1,13 +1,16 @@
 import './style.css';
-import { SETS, HACK_TIMER, RAINBOW, POWER, TUNE, hex, rgb, modeOf, tuneOf } from './config.js';
+import { SETS, HACK_TIMER, RAINBOW, POWER, TUNE, hex, rgb, modeOf, tuneOf, isShown, MIN_SHOWN } from './config.js';
 import { PICS, MINE, lookup, indexed, addPic, removePic, picId } from './library.js';
 import { Rig } from './rig.js';
 import { decodeImage, toBolt, toHat, toPic, paintPreview, paintHat } from './image.js';
 import { EFFECTS, rgb323, fromRgb323 } from './ble/spotled.js';
 import { Status } from './ble/device.js';
 import { setupDrive } from './drive.js';
-import { GuestHost, GUEST_MINUTES, TURN_SECS, PERMS, DEFAULT_RELAY, showCode } from './guests.js';
+import { GuestHost, GUEST_MINUTES, TURN_SECS, PERMS, showCode } from './guests.js';
 import { setupBadge } from './badgetab.js';
+import { setupCycle } from './cycle.js';
+import { setupMotors } from './motors/index.js';
+import { setupPlugins } from './plugins/registry.js';
 import { ascii, LANGS } from './i18n.js';
 import qrcode from 'qrcode-generator';
 
@@ -54,6 +57,43 @@ function buildTiles(setKey) {
     $('modes').append(b);
     return b;
   });
+}
+
+// ---------- SET -> ANIMATIONS: switch modes on / off per set ----------
+const animEls = { os: [], alt: [] };
+for (const [set, box, count] of [['os', 'animOs', 'animCountOs'], ['alt', 'animAlt', 'animCountAlt']]) {
+  animEls[set] = SETS[set].modes.map((m, i) => {
+    const b = document.createElement('button');
+    b.className = 'anim';
+    b.style.setProperty('--c', m.color);
+    b.innerHTML = '<span class="name"></span><span class="state"></span>';
+    b.querySelector('.name').textContent = m.name;
+    b.addEventListener('click', () => {
+      const on = !isShown(rig.state, set, i);
+      if (!rig.setShown(set, i, on)) {
+        b.classList.remove('shake');
+        void b.offsetWidth;
+        b.classList.add('shake');
+        showBanner(`Keep at least ${MIN_SHOWN} animations on in each set.`);
+      }
+    });
+    $(box).append(b);
+    return b;
+  });
+  animEls[set].count = count;
+}
+function renderAnimations(s) {
+  for (const set of ['os', 'alt']) {
+    let n = 0;
+    animEls[set].forEach((b, i) => {
+      const on = isShown(s, set, i);
+      n += on;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+      b.querySelector('.state').textContent = on ? 'ON' : 'OFF';
+    });
+    $(animEls[set].count).textContent = `${n} / ${animEls[set].length} ON`;
+  }
 }
 
 // ---------- rebreather colors ----------
@@ -352,7 +392,7 @@ $('picSave').addEventListener('click', () => {
 });
 
 // ---------- views: RIG / BOLT / HAT / BADGE / IMAGE / SET ----------
-const VIEW_KEY = 'rig-view', VIEWS = ['rig', 'bolt', 'hat', 'badge', 'image', 'set'];
+const VIEW_KEY = 'rig-view', VIEWS = ['rig', 'bolt', 'hat', 'badge', 'image', 'motor', 'set'];
 let view = localStorage.getItem(VIEW_KEY);
 if (!VIEWS.includes(view)) view = view === 'say' ? 'image' : 'rig';
 function showView(v) {
@@ -365,11 +405,9 @@ for (const b of $('views').querySelectorAll('button')) b.addEventListener('click
 showView(view);
 
 // ---------- BOLT tab ----------
-const BOLT_LOOKS = [
-  ['D', 'Dark'], ['X', 'Glitch'], ['r', 'Rainfall'], ['M', 'Matrix'],
-  ['A', 'VU'], ['R', 'Rainbow'], ['B', 'Rebreather'], ['hack', 'Hack'],
-  ['h', 'Heartbeat'], ['P', 'Sign off'],
-];
+// The rig's own animations (one tile per look: WATCH and CYCLE look like DARK), plus the virus.
+const BOLT_LOOKS = [...new Map(Object.values(SETS).flatMap((st) => st.modes)
+  .map((m) => [m.lookAs || m.key, m.name])).entries(), ['hack', 'Virus']];
 const boltLookEls = BOLT_LOOKS.map(([key, name]) => {
   const b = document.createElement('button');
   b.textContent = name;
@@ -540,6 +578,11 @@ $('fwSwitch').addEventListener('click', () => rig.setSandbox(!rig.state.sandbox)
 // "Wanna edgerun?" -> INVITE: a one-time password + the guest QR. They're in when they
 // type it; DISCONNECT ends it, PWN ends it with a show on their screen.
 const host = new GuestHost(rig);
+if (__AP__) {                              // the afterparty deck (ap.): no guests at all
+  $('guestSwitch').hidden = true;
+  document.querySelector('[data-fold="guests"]').hidden = true;
+  document.title += ' AP';
+}
 $('guestSwitch').addEventListener('click', () => {
   if (!host.enabled) return host.enable();
   if (confirm('Turn GUESTS off? Everyone is disconnected and unused passwords stop working.')) host.disable();
@@ -556,11 +599,11 @@ let shownInvite = null;
 function openInvite(again) {
   shownInvite = again && host.invites.includes(again) ? again : host.invite();
   const qr = qrcode(0, 'M');
-  qr.addData(host.link);
+  qr.addData(host.inviteLink(shownInvite));    // scanning it fills the code in
   qr.make();
   $('inviteQr').innerHTML = qr.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
   $('inviteCode').textContent = showCode(shownInvite.code);
-  $('inviteOpen').href = host.link;           // this phone / PC: a guest tab, for testing
+  $('inviteOpen').href = host.inviteLink(shownInvite);           // this phone / PC: a guest tab, for testing
   tickInvite();
   if (!$('invite').open) $('invite').showModal();
   if (rig.badge.connected) pushInvite();      // and on the badge, if it's linked
@@ -590,23 +633,9 @@ function tickInvite() {
   $('invite').classList.toggle('used', used);
 }
 $('inviteBtn').addEventListener('click', () => openInvite());
-$('inviteBtn2').addEventListener('click', () => openInvite());
 $('inviteNew').addEventListener('click', () => openInvite());
 segPick('guestGate', 'gate', (v) => host.setGate(v));
 segPick('driveGuests', 'g', (v) => host.setLetDrive(v === '1'));
-$('guestRelay').value = host.relay;
-$('guestRelay').addEventListener('change', () => {
-  const v = $('guestRelay').value.trim() || DEFAULT_RELAY;
-  if (v === host.relay) return;
-  if (!confirm('Switch the guest relay? Everyone is disconnected and the QR changes (resend the badge).')) {
-    $('guestRelay').value = host.relay;
-    return;
-  }
-  if (!host.setRelay(v)) {
-    showBanner('The relay needs a full https:// address of an ntfy server.');
-    $('guestRelay').value = host.relay;
-  }
-});
 $('guestNewLink').addEventListener('click', () => {
   if (confirm('Make a new guest link? Everyone is disconnected and old QR codes (the badge’s too) stop working.')) host.newLink();
 });
@@ -640,7 +669,7 @@ function guestSub(g, x, line) {
   const i = line.findIndex(([id]) => id === g);
   return i >= 0 ? `#${i + 1} IN LINE · ${left(x.until)}` : left(x.until);
 }
-const PERM_LABEL = { modes: 'PATTERNS', hack: 'HACK', drive: 'DRIVE', up: 'UPLOAD', say: 'WORDS', pic: 'PICS' };
+const PERM_LABEL = { modes: 'PATTERNS', hack: 'HACK', drive: 'DRIVE', motors: 'MOTORS', up: 'UPLOAD', say: 'WORDS', pic: 'PICS' };
 const openPerms = new Set();           // guests whose PERMS panel is open
 function permRow(g, x) {
   const row = document.createElement('div');
@@ -670,9 +699,10 @@ function renderGuests() {
   if (!host.enabled) { $('guestList').replaceChildren(); return; }
   const n = host.guests.size;
   $('guestCount').textContent = n ? `${n} RUNNER${n > 1 ? 'S' : ''} JACKED IN` : 'PORT OPEN';
+  renderRelay();
   const rows = [];
   for (const v of host.invites) {
-    const r = gItem('pending', `PASS ${showCode(v.code)}`, left(v.until), ['REVOKE', 'ghost', () => host.revokeInvite(v.code)]);
+    const r = gItem('pending', `CODE ${showCode(v.code)}`, left(v.until), ['REVOKE', 'ghost', () => host.revokeInvite(v.code)]);
     const who = r.querySelector('.who');           // tap it: its WANNA EDGERUN? again (and to the badge)
     who.setAttribute('role', 'button');
     who.title = 'Show this invite again';
@@ -721,6 +751,15 @@ function renderGuests() {
   tickInvite();
 }
 host.addEventListener('change', renderGuests);
+// The relay link's state, beside the guest count: tap it to reconnect (no app restart, so
+// the Bluetooth devices stay connected).
+function renderRelay() {
+  const st = host.relayState, el = $('relayState');
+  el.dataset.s = st;
+  el.textContent = { ok: 'LINK OK', connecting: 'LINKING…', down: 'LINK DOWN · TAP', off: '' }[st] ?? '';
+}
+host.addEventListener('relay', renderRelay);
+$('relayState').addEventListener('click', () => { host.reconnect(); showBanner('Reconnecting the guest link…'); });
 host.addEventListener('tick', () => {        // just the countdowns, so buttons don't jump under a finger
   for (const r of $('guestList').querySelectorAll('[data-until]')) r.querySelector('small').textContent = left(+r.dataset.until);
   const line = host.line();
@@ -770,7 +809,20 @@ TURN_SECS.forEach((s) => {
   $('guestTurn').append(b);
 });
 renderGuests();
-const badgeTab = setupBadge({ rig, host, $, segPick, segShow, showBanner });
+const badgeTab = setupBadge({ rig, host, $, segPick, segShow, showBanner, showInvite: (v) => openInvite(v) });
+setupCycle({ rig, $, showBanner });
+setupMotors({ rig, $, segPick, segShow, showBanner });
+// Plugins (src/plugins/): built-in ones, plus private ones on the dev server only.
+setupPlugins({ rig, $, segPick, segShow, showBanner });
+// MOTORS off: no MOTOR tab, no chip.
+function renderMotorsOn(s) {
+  const on = s.motors.on;
+  $('views').querySelector('[data-view="motor"]').hidden = !on;
+  const chipEl = $('status').querySelector('.dev[data-key="motor"]');
+  if (chipEl) chipEl.hidden = !on;
+  if (!on && view === 'motor') showView('rig');
+}
+rig.addEventListener('change', (e) => renderMotorsOn(e.detail));
 
 // ---------- power ----------
 const asleep = (p) => p === POWER.STANDBY || p === POWER.OFF;
@@ -814,7 +866,9 @@ function render(s) {
 
   for (const [k, el] of Object.entries(tabEls)) el.classList.toggle('on', k === s.set);
   buildTiles(s.set);
+  tileEls.forEach((el, i) => { el.hidden = !isShown(s, s.set, i); });     // SET -> ANIMATIONS
   tileEls.forEach((el, i) => el.classList.toggle('active', i === s.idx[s.set] && s.power === POWER.ON));
+  renderAnimations(s);
   tileEls.forEach((el, i) => {                // tiles show the tuned colours
     const m = SETS[s.set].modes[i], t = tuneOf(s, m.key);
     if (t.colors[0]) el.style.setProperty('--c', hex(t.colors[0]));
@@ -855,6 +909,7 @@ function chip(key, label, onTap) {
   const el = document.createElement('button');
   el.className = 'dev';
   el.dataset.s = 'idle';
+  el.dataset.key = key;
   el.innerHTML = `<span class="dot"></span><span>${label}</span>`;
   if (onTap) el.addEventListener('click', onTap);
   $('status').append(el);
@@ -863,24 +918,35 @@ function chip(key, label, onTap) {
 }
 
 chip('clue', 'CLUE', () => pick(rig.clue));
-chip('maskL', 'Mask L');
-chip('maskR', 'Mask R');
+// The mask: one chip, both intakes, lit like the NEON mode's OPEN sign (L cyan | R pink tubes).
+{
+  const el = document.createElement('div');
+  el.className = 'dev mask';
+  el.setAttribute('role', 'status');
+  el.innerHTML = '<span class="mask-name">MASK</span>' +
+    '<span class="tube l" data-s="idle">L</span><span class="bar">|</span><span class="tube r" data-s="idle">R</span>';
+  $('status').append(el);
+  statusEls.maskL = el.querySelector('.tube.l');
+  statusEls.maskR = el.querySelector('.tube.r');
+}
 chip('cap', 'Hat', () => pick(rig.cap));
 chip('bolt', 'BOLT', () => pick(rig.bolt));
 chip('badge', 'Badge', () => pick(rig.badge));
+chip('motor', 'Motor', () => pick(rig.motor));
+renderMotorsOn(rig.state);
 
 for (const d of rig.devices) {
   d.addEventListener('status', (e) => {
     statusEls[d.key].dataset.s = e.detail.status;
-    updateConnect();
     if (d === rig.clue) updateMask();
   });
 }
 
 function updateMask() {
   for (const side of ['L', 'R']) {
-    statusEls['mask' + side].dataset.s =
-      !rig.clue.connected ? 'idle' : rig.clue.mask[side] ? 'connected' : 'lost';
+    const tube = statusEls['mask' + side];
+    tube.dataset.s = !rig.clue.connected ? 'idle' : rig.clue.mask[side] ? 'connected' : 'lost';
+    tube.title = `Mask ${side === 'L' ? 'left' : 'right'}: ${{ idle: 'CLUE not connected', connected: 'linked', lost: 'not linked' }[tube.dataset.s]}`;
   }
 }
 rig.clue.addEventListener('mask', updateMask);
@@ -899,25 +965,6 @@ async function pick(d) {
   }
 }
 
-function updateConnect() {
-  const btn = $('connect');
-  const next = rig.nextUnconnected();
-  if (!next) {
-    btn.textContent = 'ALL LINKED';
-    btn.disabled = true;
-    return;
-  }
-  // The CLUE is the one that matters; cap + BOLT are optional extras.
-  btn.textContent = `CONNECT ${next.label.toUpperCase()}`;
-  btn.disabled = false;
-}
-
-// Chrome needs a fresh tap for each device picker, so Connect steps through them.
-$('connect').addEventListener('click', () => {
-  const next = rig.nextUnconnected();
-  if (next) pick(next);
-});
-
 function showBanner(msg) {
   const b = $('banner');
   b.textContent = msg;
@@ -931,11 +978,16 @@ if (!navigator.bluetooth) {
   const b = $('banner');
   b.textContent = 'Web Bluetooth is not available. Open this page in Chrome (Android or desktop), over HTTPS.';
   b.hidden = false;
-  $('connect').disabled = true;
 } else {
-  updateConnect();
-  rig.restoreAll().then(updateConnect);
+  rig.restoreAll();          // devices Chrome already knows reconnect by themselves; the chips pick new ones
 }
+
+// The keyboard covers the bottom of the screen (the page doesn't resize: viewport
+// interactive-widget=resizes-visual); make sure the box being typed in is in view.
+document.addEventListener('focusin', (e) => {
+  if (!e.target.matches('input.text, input[type=number]')) return;
+  setTimeout(() => e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300);
+});
 
 // Keep the screen on while the controller is open.
 async function holdWake() {

@@ -10,25 +10,35 @@ const lanHost = process.env.LAN_HOST || Object.entries(networkInterfaces())
   .flatMap(([, list]) => list)
   .find((a) => a.family === 'IPv4' && !a.internal && !a.address.startsWith('169.254.'))?.address || '';
 
-// Served as a GitHub Pages project site: https://<user>.github.io/cyber-rig-controller/
-// For a custom domain at the root later, build with BASE=/ and add public/CNAME.
-// `vite build --mode cloudflare` (npm run deploy) builds for the root of deck.steamworkz.net.
-const pick = (mode) => process.env.BASE || (mode === 'cloudflare' ? '/' : '/cyber-rig-controller/');
 
-export default defineConfig(({ mode }) => {
-  const base = pick(mode);
+// Two builds:
+//   npm run build      dist/     the public deck (deck. / jack.): the deck + guest.html
+//   npm run build:ap   dist-ap/  the afterparty deck (ap., behind its own login): the deck
+//                                + the private plugins (src/private/), no guests
+// The dev server has the private plugins too, and guests.
+export default defineConfig(({ command, mode }) => {
+  const base = process.env.BASE || '/';   // the site root
+  const ap = mode === 'ap';
   return {
   base,
-  define: { __LAN_HOST__: JSON.stringify(lanHost) },
-  // Two pages: the deck itself, and guest.html, which friends open from the invite QR.
-  build: { rollupOptions: { input: { main: 'index.html', guest: 'guest.html' } } },
+  define: {
+    __LAN_HOST__: JSON.stringify(lanHost),
+    __AP__: JSON.stringify(ap),                          // no guests on this build
+    __PRIVATE__: JSON.stringify(ap || command === 'serve'),   // load src/private/ plugins
+  },
+  build: {
+    outDir: ap ? 'dist-ap' : 'dist',
+    // The public build: the deck itself, and guest.html, which friends open from the invite QR.
+    rollupOptions: { input: ap ? { main: 'index.html' } : { main: 'index.html', guest: 'guest.html' } },
+  },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['octlet.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'],
       manifest: {
-        name: 'STEAMWorkz Cyber Deck',
-        short_name: 'Cyber Deck',
+        id: ap ? '/?ap' : '/',      // installs as its own app next to the deck
+        name: ap ? 'STEAMWorkz Cyber Deck AP' : 'STEAMWorkz Cyber Deck',
+        short_name: ap ? 'Deck AP' : 'Cyber Deck',
         description: 'The deck that runs the STEAMWorkz cyber rig',
         start_url: base,
         scope: base,

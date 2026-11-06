@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-visual" />
     <meta name="theme-color" content="#000000" />
     <title>Jack In</title>
     <link rel="icon" type="image/svg+xml" href="octlet.svg" />
@@ -20,15 +20,37 @@
       <!-- knocking -->
       <section class="panel" id="gJoin" aria-label="Jack in">
         <div class="seg seg5 glang" id="gLang" aria-label="Language"></div>
-        <p class="hint" data-i18n="intro"></p>
-        <input class="text" id="gName" maxlength="12" data-i18n-ph="handle" autocomplete="nickname" enterkeyhint="next" />
-        <input class="text code" id="gPass" maxlength="7" data-i18n-ph="password" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" />
-        <label class="consent">
-          <input type="checkbox" id="gConsent" />
-          <span data-i18n="consent"></span>
-        </label>
-        <p class="hint" id="gJoinNote" hidden></p>
-        <button class="connect" id="gJoinBtn" data-i18n="jackIn" disabled></button>
+        <div class="seg gstyle" id="gStyle" aria-label="Words">
+          <button data-style="plain"></button>
+          <button data-style="night">NIGHT CITY</button>
+        </div>
+        <!-- A phone that's been here before: the same person again, or someone new? -->
+        <div class="who" id="gWho" hidden>
+          <p class="gbig" data-i18n="whoTitle"></p>
+          <button class="connect" id="gReturning"></button>
+          <button class="ghost send" id="gNewGuest" data-i18n="newGuest"></button>
+        </div>
+        <div class="steps" id="gSteps">
+        <p class="gstep" id="gStepNo">1 / 3</p>
+        <!-- One step at a time: the current one lit, the rest dimmed; NEXT unlocks the next. -->
+        <div class="step" data-step="1">
+          <p class="hint" data-i18n="intro"></p>
+          <p class="consent" data-i18n="consent"></p>
+          <button class="connect" id="gAgree" data-i18n="agree"></button>
+        </div>
+        <div class="step" data-step="2">
+          <label class="label" for="gName" data-i18n="handleLabel"></label>
+          <input class="text" id="gName" maxlength="12" data-i18n-ph="handle" autocomplete="nickname" enterkeyhint="next" />
+          <button class="connect" id="gNext" data-i18n="next"></button>
+        </div>
+        <div class="step" data-step="3">
+          <label class="label" for="gPass" data-i18n="codeLabel"></label>
+          <input class="text code" id="gPass" type="text" maxlength="7" data-i18n-ph="password" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="go" />
+          <span class="hint" data-i18n="codeHelp"></span>
+          <p class="hint" id="gJoinNote" hidden></p>
+          <button class="connect" id="gJoinBtn" data-i18n="jackIn"></button>
+        </div>
+        </div>
       </section>
 
       <section class="panel" id="gWait" hidden aria-live="polite">
@@ -46,10 +68,15 @@
         </div>
         <p class="banner" id="gNote" hidden></p>
         <p class="gturn" id="gTurn" hidden></p>
+        <!-- What they can do right now: ✓ ready, ⏳ their turn's coming, 🔒 locked. Tap to go there. -->
+        <section class="gcan" aria-label="What you can do">
+          <span class="label" data-i18n="canTitle"></span>
+          <div class="gchips" id="gCan"></div>
+        </section>
 
         <section class="panel gdebug" aria-label="DEBUG">
           <p class="gbig">DEBUG // BYTE vs BUG.EXE</p>
-          <span class="hint" data-i18n="debugHint"></span>
+          <span class="hint" id="gDebugHint"></span>
           <div class="seg gplay">
             <button id="gPlayGame" data-i18n="play"></button>
             <button id="gSkip" data-i18n="skipBtn"></button>
@@ -83,6 +110,12 @@
           <span class="label" data-i18n="driveTitle"></span>
           <div class="stick" id="gStick"><div class="knob" id="gKnob"></div></div>
           <span class="hint" data-i18n="driveHint"></span>
+        </section>
+
+        <section class="panel" data-perm="motors" id="gMotors" hidden aria-label="Motors">
+          <span class="label" data-i18n="motorsTitle"></span>
+          <div class="gmotors" id="gMotorList"></div>
+          <span class="hint" data-i18n="motorsHint"></span>
         </section>
 
         <section class="panel" data-perm="up" aria-label="Send your own picture">

@@ -1,0 +1,18 @@
+// The afterparty deck: ap.steamworkz.net. Only the built files (dist-ap/: the deck plus the
+// private plugins, no guest page), behind its own Cloudflare Access app (a login + MFA).
+// Deployed from the PC, separately from the public deck:
+//   npm run deploy:ap   (builds dist-ap/, then deploys this)
+// It talks to no relay and has no jack. address: guests can't reach it.
+{
+  "name": "cyber-deck-ap",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist-ap",
+    "not_found_handling": "single-page-application"
+  },
+  "routes": [
+    { "pattern": "ap.steamworkz.net", "custom_domain": true }
+  ],
+  "workers_dev": false,                  // no *.workers.dev back door around the login
+  "preview_urls": false
+}

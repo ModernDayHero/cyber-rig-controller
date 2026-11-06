@@ -1,8 +1,7 @@
-// A tiny ntfy-compatible relay for local tests: POST /<topic> (body = message),
+// A stand-in for the guest relay (worker/relay), for local tests: POST /<topic> (body = message),
 // GET /<t1>,<t2>/sse (an "open" event, then message events). No limits, memory only.
 //   node tools/mock-relay.mjs          (PORT=8099 by default)
-// The deck's RELAY setting only takes https://, so point tests at it in code
-// (host.relay = 'http://localhost:8099'), not through the app. See docs/relay-setup.md.
+// Point a test at it in code: host.relay = 'http://localhost:8099'.
 import { createServer } from 'node:http';
 
 const subs = new Map();                 // topic -> Set(res)

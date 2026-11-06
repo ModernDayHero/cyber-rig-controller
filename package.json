@@ -6,8 +6,10 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview --host",
-    "build:cf": "vite build --mode cloudflare",
-    "deploy": "npm run build:cf && wrangler deploy --config wrangler.jsonc && wrangler deploy --config worker/relay/wrangler.toml"
+    "deploy": "npm run build && wrangler deploy --config wrangler.jsonc && wrangler deploy --config worker/relay/wrangler.toml",
+    "build:ap": "vite build --mode ap",
+    "preview:ap": "vite preview --mode ap --outDir dist-ap",
+    "deploy:ap": "npm run build:ap && wrangler deploy --config wrangler.ap.jsonc"
   },
   "devDependencies": {
     "vite": "^8.3.4",

@@ -27,6 +27,8 @@ export const SETS = {
       { key: 'P', name: 'Sign off',   color: '#E6E6FF', hint: 'flare, then fade out' },
       { key: 'e', name: 'Neon',       color: '#FF1496', alt: '#00E5FF', hint: 'buzzing neon sign' },
       { key: 'o', name: 'Overclock',  color: '#FF6E00', hint: 'heats up as you move' },
+      // Runs the stored sequence (SET -> CYCLE); the CLUE steps through modes on its own.
+      { key: 'cyc', name: 'Cycle',    color: '#22FF66', hint: 'runs your sequence', cycle: true, lookAs: 'D' },
     ],
   },
 };
@@ -130,7 +132,11 @@ export const cmd = {
   // Incoming call ('c') / message ('m'); text = caller or message, shown on the CLUE.
   alert: (kind, text = '') => `N ${kind}${text ? ' ' + text : ''}`,
   mute: (on) => `Q ${on ? 1 : 0}`,
+  // CYCLE: store a sequence on the CLUE (steps of { set, i, s }), then start / stop it.
+  cycle: (steps) => `U ${steps.map(({ set, i, s }) => `${set} ${i} ${s}`).join(' ')}`,
+  cycleGo: (on) => `G ${on ? 1 : 0}`,
   sandbox: (on) => `X ${on ? 1 : 0}`,
+  shown: ({ os, alt }) => `O ${os} ${alt}`,
   // A mask animation (recipes.js) for mode `key`, as hex; the CLUE passes it to both sides.
   recipe: (key, bytes) => `L ${key} ${bytes.map((v) => v.toString(16).padStart(2, '0')).join('')}`,
   query: () => '?',
@@ -148,6 +154,12 @@ export const cmd = {
 };
 
 export const modeOf = (s) => SETS[s.set].modes[s.idx[s.set]];
+
+// SET -> ANIMATIONS: which modes are switched on, a bit per mode in each set (all on to
+// start). The RIG tab, guests and the CLUE's A/B only offer those; CYCLE may use any.
+export const ALL_SHOWN = { os: 0xFFFF, alt: 0xFFFF };
+export const MIN_SHOWN = 4;
+export const isShown = (s, set, i) => !!(((s.shown ?? ALL_SHOWN)[set] >> i) & 1);
 
 export const hex = ([r, g, b]) => '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
 export const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));

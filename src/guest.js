@@ -1,22 +1,25 @@
 // guest.html: a friend's phone, from the invite QR (the badge or the owner's phone) and a
-// one-time password. No Bluetooth here: everything goes as a request through the relay
-// (ntfy) session topic to the owner's deck (guests.js), which decides. Answers come back
+// one-time access code. No Bluetooth here: everything goes as a request through the relay's
+// session topic (worker/relay) to the owner's deck (guests.js), which decides. Answers come back
 // on <topic>-<our id>, rig news on <topic>-all. A PWN from the owner glitches this page
 // (only this page: there's nothing else a web page could touch), then says so.
 //
-// The link: guest.html#<topic>, or #<topic>@<relay host> when the deck uses its own relay.
-// The first screen picks the language (i18n.js) and asks for consent.
+// The link: guest.html#<topic>[&k=<access code>]. An invite's QR carries its
+// code (k), so scanning it fills the code in. Signing in goes a step at a time: language +
+// I AGREE, the handle, the access code.
 
 import './style.css';
-import { SETS } from './config.js';
+import { SETS, isShown } from './config.js';
 import { PICS, indexed } from './library.js';
 import { decodeImage, toPic, paintPreview } from './image.js';
-import { DEFAULT_RELAY } from './guests.js';
-import { LANGS, guessLang, words } from './i18n.js';
+import { RELAY } from './guests.js';
+import { LANGS, STYLES, guessLang, words } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
-const [topic, relayHost] = location.hash.slice(1).split('@');
-const RELAY = relayHost && /^[a-z0-9.-]+(:\d+)?$/i.test(relayHost) ? `https://${relayHost}` : DEFAULT_RELAY;
+const [main, ...params] = location.hash.slice(1).split('&');
+const topic = main.split('@')[0];      // (an old link may still say @<relay>)
+const linkCode = (params.find((p) => p.startsWith('k=')) || '').slice(2).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+if (linkCode) history.replaceState(null, '', `${location.pathname}${location.search}#${main}`);   // not left in history
 const ME_KEY = `rig-guest-${topic}`;
 const rand = (n) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (v) => (v % 36).toString(36)).join('');
 const COOL_MS = 1500;                 // the deck ignores faster than ~1.2 s anyway
@@ -27,15 +30,20 @@ let me = {};
 try { me = JSON.parse(localStorage.getItem(ME_KEY)) || {}; } catch {}
 me.g ||= rand(16);
 me.lang ||= guessLang();
+if (!STYLES.includes(me.style)) me.style = 'plain';   // everyday words, unless they pick NIGHT CITY
 const saveMe = () => { try { localStorage.setItem(ME_KEY, JSON.stringify(me)); } catch {} };
 saveMe();
 
 // ---------- language ----------
-let t = words(me.lang);
+let t = words(me.lang, me.style);
 let stateKey = 'stOffline';
 function applyLang() {
-  t = words(me.lang);
+  t = words(me.lang, me.style);
   document.documentElement.lang = me.lang;
+  for (const b of $('gStyle').children) {
+    b.classList.toggle('on', b.dataset.style === me.style);
+    if (b.dataset.style === 'plain') b.textContent = words(me.lang, 'plain').styleName;
+  }
   for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t[el.dataset.i18n];
   for (const el of document.querySelectorAll('[data-i18n-ph]')) el.placeholder = t[el.dataset.i18nPh];
   for (const b of $('gLang').children) b.classList.toggle('on', b.dataset.lang === me.lang);
@@ -43,10 +51,11 @@ function applyLang() {
   renderNews();
   renderAccess();
   buildModes();
+  $('gReturning').textContent = t.returning.replace('{name}', me.name || '');
 }
 // What's theirs: each section has a permission (data-perm); patterns / hack / drive are
 // also the operator's only, one guest at a time (turns, guests.js).
-const TURN_PERMS = new Set(['modes', 'hack', 'drive']);
+const TURN_PERMS = new Set(['modes', 'hack', 'drive', 'motors']);
 function renderAccess() {
   document.body.classList.toggle('full', !!me.full);
   $('gAccess').textContent = me.full ? t.accessFull : t.accessGuest;
@@ -55,9 +64,27 @@ function renderAccess() {
   for (const el of document.querySelectorAll('[data-perm]')) {
     const p = el.dataset.perm, mine = !!perms[p], wait = mine && TURN_PERMS.has(p) && !me.op;
     el.classList.toggle('locked', !mine || wait);
+    el.classList.toggle('ready', mine && !wait && !el.hidden);   // lit up: usable right now
     el.dataset.lock = !mine ? t.lockedHint : wait ? t.waitTurn : '';
+    el.dataset.ready = t.readyTag;
   }
+  // Once it's all theirs, the game is for the high scores: it moves to the bottom, smaller.
+  $('gDebugHint').textContent = me.full ? t.replayHint : t.debugHint;
+  renderCan();
   renderTurn();
+}
+// YOU CAN NOW: a chip per thing, in page order; tap one to scroll to it.
+const CAN = ['modes', 'hack', 'drive', 'motors', 'say', 'pic', 'up'];
+function renderCan() {
+  const perms = me.perms || {};
+  $('gCan').replaceChildren(...CAN.filter((p) => (p !== 'drive' || news.drive) && (p !== 'motors' || news.motors)).map((p) => {
+    const mine = !!perms[p], wait = mine && TURN_PERMS.has(p) && !me.op;
+    const b = document.createElement('button');
+    b.className = `chip ${!mine ? 'off' : wait ? 'wait' : 'on'}`;
+    b.textContent = `${!mine ? '🔒' : wait ? '⏳' : '✓'} ${t.can[p]}`;
+    b.addEventListener('click', () => document.querySelector(`[data-perm="${p}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+    return b;
+  }));
 }
 function renderTurn() {
   const el = $('gTurn'), canOperate = [...TURN_PERMS].some((p) => me.perms?.[p]);
@@ -67,6 +94,9 @@ function renderTurn() {
   el.textContent = me.op ? `${t.opYou} · ${mmss(me.turnUntil - Date.now())}`
     : `${t.inLine.replace('{n}', me.pos).replace('{t}', mmss(me.turnAt - Date.now()))}${me.full ? '' : ' · ' + t.moveUp}`;
 }
+for (const b of $('gStyle').children) {
+  b.addEventListener('click', () => { me.style = b.dataset.style; saveMe(); applyLang(); refreshEnd(); });
+}
 $('gLang').append(...LANGS.map(({ code, label }) => {
   const b = document.createElement('button');
   b.textContent = label;
@@ -75,7 +105,73 @@ $('gLang').append(...LANGS.map(({ code, label }) => {
   b.addEventListener('click', () => { me.lang = code; saveMe(); applyLang(); });
   return b;
 }));
-$('gConsent').addEventListener('change', () => { $('gJoinBtn').disabled = !$('gConsent').checked; });
+// ---------- signing in, a step at a time ----------
+let step = 1;
+function setStep(n) {
+  step = n;
+  $('gStepNo').textContent = `${n} / 3`;
+  for (const el of document.querySelectorAll('#gJoin .step')) {
+    const s = +el.dataset.step;
+    el.classList.toggle('now', s === n);
+    el.classList.toggle('done', s < n);
+    el.inert = s > n;                    // later steps: dimmed and out of reach until NEXT
+  }
+  const f = { 2: $('gName'), 3: $('gPass') }[n];
+  if (f) setTimeout(() => f.focus(), 50);
+}
+// A finished step can be tapped to go back to it.
+for (const el of document.querySelectorAll('#gJoin .step')) {
+  el.addEventListener('click', () => { if (+el.dataset.step < step) setStep(+el.dataset.step); });
+}
+// ---------- new guest / returning guest ----------
+// This phone has been signed in before: the same person picks up where they left off (name
+// and agreement kept: just the code, or straight back in while their certificate holds);
+// someone new starts clean, with a new guest id of their own.
+function askWho() {
+  $('gWho').hidden = false;
+  $('gSteps').hidden = true;
+  $('gReturning').textContent = t.returning.replace('{name}', me.name);
+}
+function startSteps(n) {
+  $('gWho').hidden = true;
+  $('gSteps').hidden = false;
+  setStep(n);
+}
+$('gReturning').addEventListener('click', () => {
+  if (me.k) return join(true);          // the certificate is still good: knock, straight in
+  $('gName').value = me.name;
+  startSteps(3);
+});
+$('gNewGuest').addEventListener('click', () => {
+  me = { g: rand(16), lang: me.lang };
+  saveMe();
+  opened = listen();                     // answers for the new id
+  $('gName').value = '';
+  startSteps(1);
+});
+/** The sign-in screen: ask who it is if this phone has a name on it, else from the top. */
+function signIn() {
+  screen('gJoin', 'stOffline');
+  if (me.name && me.agreed) askWho();
+  else startSteps(me.agreed ? 2 : 1);
+}
+
+$('gAgree').addEventListener('click', (e) => {
+  e.stopPropagation();
+  me.agreed = true;
+  saveMe();
+  setStep(2);
+});
+function nameDone(e) {
+  e?.stopPropagation();
+  const name = $('gName').value.trim();
+  if (!name) return $('gName').focus();
+  me.name = name;
+  saveMe();
+  setStep(3);
+}
+$('gNext').addEventListener('click', nameDone);
+$('gName').addEventListener('keydown', (e) => { if (e.key === 'Enter') nameDone(e); });
 
 // ---------- screens ----------
 const SCREENS = ['gJoin', 'gWait', 'gPlay', 'gPwn', 'gEnd'];
@@ -84,7 +180,15 @@ function screen(id, state) {
   stateKey = state;
   $('gState').textContent = t[state] ?? state;
 }
+let endWhy = null;
+function refreshEnd() {
+  if (!endWhy || $('gEnd').hidden) return;
+  const [title, text] = t.end[endWhy] || t.end.kicked;
+  $('gEndTitle').textContent = title;
+  $('gEndWhy').textContent = text;
+}
 function end(why) {
+  endWhy = why;
   const [title, text] = t.end[why] || t.end.kicked;
   if (why !== 'left') me.k = null;       // LEAVE keeps the certificate: TRY AGAIN rejoins
   saveMe();
@@ -131,6 +235,8 @@ function onAnswer(m) {
       saveMe();
       renderAccess();
       note(t.fullGranted, 6000);
+      // Show them what just opened up (once the game's closed).
+      setTimeout(() => document.querySelector('[data-perm].ready')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 4000);
       break;
     case 'perms':                        // the owner changed what's ours
       me.perms = m.perms || {};
@@ -148,6 +254,7 @@ function onAnswer(m) {
       break;
     case 'nope':
       screen('gJoin', 'stOffline');
+      startSteps(3);
       $('gJoinNote').hidden = false;
       $('gJoinNote').textContent = m.why === 'pause' ? t.pause : t.denied;
       $('gPass').select();
@@ -160,7 +267,7 @@ function onAnswer(m) {
       break;
     case 'deny':
       note({ firewall: t.denyFirewall, hacked: t.denyHacked, busy: t.denyBusy, locked: t.lockedHint,
-        wheel: t.denyWheel, parked: t.denyParked, turn: t.waitTurn }[m.why] || t.denied2);
+        parked: t.denyParked, motorsOff: t.denyMotors, turn: t.waitTurn }[m.why] || t.denied2);
       break;
     case 'res':
       if (m.kind === 'skip') note(t.skipDenied, 6000);
@@ -168,57 +275,79 @@ function onAnswer(m) {
       else note(m.kind === 'up' ? (m.ok ? t.okPic : t.noPic) : (m.ok ? t.okWord : t.noWord));
       break;
     case 'news':
-      news = { fw: !!m.fw, hacked: !!m.hacked, drive: !!m.drive };
+      news = { fw: !!m.fw, hacked: !!m.hacked, drive: !!m.drive, shown: m.shown, motors: Array.isArray(m.motors) && m.motors.length ? m.motors : null };
       renderNews();
+      buildModes();
       break;
   }
 }
 
+// Our answers come on <topic>-<our id>: a new guest (new id) listens afresh.
+// The same watchdog as the deck's: a minute without the relay's 25 s keepalive (or waking
+// up after a while) reopens it.
+let es = null, alive = Date.now();
 function listen() {
-  const es = new EventSource(`${RELAY}/${topic}-${me.g},${topic}-all/sse`);
+  es?.close();
+  alive = Date.now();
+  es = new EventSource(`${RELAY}/${topic}-${me.g},${topic}-all/sse`);
+  const ping = () => { alive = Date.now(); };
+  es.addEventListener('keepalive', ping);
   es.onmessage = (e) => {
+    ping();
     try {
       const n = JSON.parse(e.data);
       if (n.event === 'message') onAnswer(JSON.parse(n.message));
     } catch {}
   };
-  return new Promise((ok) => { es.onopen = ok; });
+  return new Promise((ok) => { es.onopen = () => { ping(); ok(); }; });
+}
+setInterval(() => { if (topicOk && Date.now() - alive > 70000) opened = listen(); }, 10000);
+document.addEventListener('visibilitychange', () => {
+  if (topicOk && document.visibilityState === 'visible' && Date.now() - alive > 35000) opened = listen();
+});
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** The link open, or given up on after a few seconds (reopened once): never a forever wait. */
+async function linkReady() {
+  const ok = await Promise.race([opened.then(() => true), sleep(6000).then(() => false)]);
+  if (ok) return;
+  opened = listen();
+  await Promise.race([opened, sleep(6000)]);
 }
 
 // ---------- knocking ----------
 async function join(again = false) {
   const name = $('gName').value.trim() || me.name || '';
   const p = $('gPass').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (!name) return $('gName').focus();
-  if (!again && (p.length !== 6 || !$('gConsent').checked)) return $('gPass').focus();
+  if (!again && !me.agreed) return setStep(1);
+  if (!name) return setStep(2);
+  if (!again && p.length !== 6) return $('gPass').focus();
   me.name = name;
   saveMe();
   $('gJoinNote').hidden = true;
   screen('gWait', 'stKnocking');
   $('gWaitHint').textContent = t.checking;
-  await opened;
+  await linkReady();
   if (!await post({ t: 'join', name, p, lang: me.lang })) {
     $('gWaitHint').textContent = t.relayBusy;
-    setTimeout(() => !$('gWait').hidden && screen('gJoin', 'stOffline'), 4000);
+    setTimeout(() => { if (!$('gWait').hidden) { screen('gJoin', 'stOffline'); startSteps(3); } }, 4000);
     return;
   }
   clearTimeout(join.t);
   join.t = setTimeout(() => {
     if (!$('gWait').hidden) {
       $('gWaitHint').textContent = t.noAnswer;
-      setTimeout(() => !$('gWait').hidden && screen('gJoin', 'stOffline'), 4000);
+      setTimeout(() => { if (!$('gWait').hidden) { screen('gJoin', 'stOffline'); startSteps(3); } }, 4000);
     }
   }, 20000);
 }
-$('gJoinBtn').addEventListener('click', () => join());
-$('gName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('gPass').focus(); });
+$('gJoinBtn').addEventListener('click', (e) => { e.stopPropagation(); join(); });
 $('gPass').addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); });
 $('gPass').addEventListener('input', () => {        // ABC-DEF as they type
   const v = $('gPass').value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
   $('gPass').value = v.length > 3 ? `${v.slice(0, 3)}-${v.slice(3)}` : v;
 });
-// TRY AGAIN: straight back in while the certificate is good; else a fresh password.
-$('gAgain').addEventListener('click', () => (me.k ? join(true) : screen('gJoin', 'stOffline')));
+// TRY AGAIN: straight back in while the certificate is good; else a fresh access code.
+$('gAgain').addEventListener('click', () => (me.k ? join(true) : signIn()));
 
 // ---------- in ----------
 function play() {
@@ -269,12 +398,14 @@ function pwned(by, stay = false) {
 
 // ---------- DEBUG: Byte vs BUG.EXE ----------
 function closeGame() {
+  document.body.classList.remove('gaming');
   $('gGame').hidden = true;
   $('gGameFrame').src = 'about:blank';
 }
 $('gPlayGame').addEventListener('click', () => {
   if (!me.k) return;
   $('gGameFrame').src = 'viz/byte-vs-bug.html?embed';
+  document.body.classList.add('gaming');    // no scrolling the page behind the game
   $('gGame').hidden = false;
 });
 $('gGameClose').addEventListener('click', closeGame);
@@ -301,6 +432,9 @@ window.addEventListener('message', (e) => {
 
 function renderNews() {
   $('gDrive').hidden = !news.drive;
+  $('gMotors').hidden = !news.motors;
+  buildMotors();
+  if ($('gCan').childElementCount || me.perms) renderCan();
   $('gHack').disabled = news.fw;
   $('gHack').textContent = news.fw ? t.fwOn : t.hackAll;
   $('gHackHint').textContent = news.fw ? t.fwHint : news.hacked ? t.hackedHint : t.hackHint;
@@ -317,7 +451,8 @@ function buildModes() {
     b.addEventListener('click', () => { gSet = key; buildModes(); });
     return b;
   }));
-  $('gModes').replaceChildren(...SETS[gSet].modes.map((m, i) => {
+  $('gModes').replaceChildren(...SETS[gSet].modes.map((m, i) => [m, i])
+    .filter(([m, i]) => !m.cycle && isShown(news, gSet, i)).map(([m, i]) => {
     const b = document.createElement('button');
     b.className = 'mode' + (m.rainbow ? ' rainbow' : '') + (m.alt ? ' duo' : '');
     b.style.setProperty('--c', m.color);
@@ -382,6 +517,65 @@ $('gHack').addEventListener('click', () => act({ t: 'hack' }));
   document.addEventListener('visibilitychange', () => { if (document.hidden) release(); });
 }
 
+// ---------- MOTORS ----------
+// A slider per servo (it stays where it's put), hold-to-run buttons per motor: the deck
+// caps them, and the plugin stops a motor 1.5 s after we go quiet, so we repeat while held.
+let motorSig = '';
+function buildMotors() {
+  const chs = news.motors || [], sig = JSON.stringify(chs);
+  if (sig === motorSig) return;
+  motorSig = sig;
+  $('gMotorList').replaceChildren(...chs.map((ch) => {
+    const row = document.createElement('div');
+    row.className = 'gmotor';
+    const name = document.createElement('span');
+    name.className = 'label';
+    name.textContent = ch.name;
+    row.append(name);
+    if (ch.type === 'servo') {
+      const r = document.createElement('input');
+      Object.assign(r, { type: 'range', min: -100, max: 100, step: 5, value: 0 });
+      let last = 0, t = null;
+      const send = () => { last = Date.now(); post({ t: 'mot', c: ch.i, v: Number(r.value) / 100 }); };
+      r.addEventListener('input', () => {
+        if (!me.k) return;
+        clearTimeout(t);
+        if (Date.now() - last > 250) send(); else t = setTimeout(send, 250);
+      });
+      row.append(r);
+    } else {
+      const seg = document.createElement('div');
+      seg.className = 'seg';
+      for (const [dir, txt] of [[-1, '◀'], [1, '▶']]) {
+        const b = document.createElement('button');
+        b.textContent = txt;
+        let beat = null;
+        const go = (e) => {
+          if (!me.k) return;
+          b.setPointerCapture?.(e.pointerId);
+          b.classList.add('on');
+          post({ t: 'mot', c: ch.i, v: dir });
+          clearInterval(beat);
+          beat = setInterval(() => post({ t: 'mot', c: ch.i, v: dir }), 700);
+        };
+        const stop = () => {
+          if (!beat) return;
+          clearInterval(beat);
+          beat = null;
+          b.classList.remove('on');
+          post({ t: 'mot', c: ch.i, v: 0 });
+        };
+        b.addEventListener('pointerdown', go);
+        for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(ev, stop);
+        document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
+        seg.append(b);
+      }
+      row.append(seg);
+    }
+    return row;
+  }));
+}
+
 function say() {
   const text = $('gText').value.trim();
   if (!text || !me.k) return;
@@ -426,10 +620,18 @@ $('gUpSend').addEventListener('click', () => {
   note(t.sentPic);
 });
 
+// The keyboard covers the bottom of the screen (the page doesn't resize: viewport
+// interactive-widget=resizes-visual); make sure the box being typed in is in view.
+document.addEventListener('focusin', (e) => {
+  if (!e.target.matches('input.text')) return;
+  setTimeout(() => e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }), 300);
+});
+
 // ---------- start ----------
 let opened;
+const topicOk = /^cd[a-z0-9]{20}$/.test(topic);
 applyLang();
-if (!/^cd[a-z0-9]{20}$/.test(topic)) {
+if (!topicOk) {
   end('link');
 } else {
   opened = listen();
@@ -438,6 +640,7 @@ if (!/^cd[a-z0-9]{20}$/.test(topic)) {
     join(true);
   } else {
     if (me.name) $('gName').value = me.name;
-    screen('gJoin', 'stOffline');
+    if (linkCode) $('gPass').value = `${linkCode.slice(0, 3)}-${linkCode.slice(3)}`;   // from the invite QR
+    signIn();
   }
 }

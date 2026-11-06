@@ -1,6 +1,6 @@
-// Guest relay for the Cyber Deck: a tiny ntfy-compatible server on Cloudflare (a Worker +
-// one Durable Object per guest session), so nothing at home has to be reachable. It
-// speaks the same protocol the app uses with ntfy (src/guests.js, src/guest.js):
+// Guest relay for the Cyber Deck: a tiny publish / listen server on Cloudflare (a Worker +
+// one Durable Object per guest session), so nothing at home has to be reachable. The
+// protocol the app speaks (src/guests.js, src/guest.js):
 //   POST /<topic>          body = the message (text, at most 8 KB)
 //   GET  /<t1>,<t2>/sse    Server-Sent Events: an "open" event, then each message as
 //                          data: {"id","time","event":"message","topic","message"}
@@ -8,8 +8,7 @@
 //   cd<20>                 guests -> the owner's phone
 //   cd<20>-<16>            the owner's phone -> one guest
 //   cd<20>-all             the owner's phone -> every guest
-// Nothing is stored: a message goes to whoever is listening right then, like ntfy without
-// its cache. The one-time passwords and tokens are checked by the owner's phone, not here.
+// Nothing is stored: a message goes to whoever is listening right then. The one-time passwords and tokens are checked by the owner's phone, not here.
 
 const TOPIC = /^(cd[a-z0-9]{20})(?:-(?:[a-z0-9]{16}|all))?$/;
 const MAX_BODY = 8192;

@@ -2,8 +2,8 @@
 // It never draws anything itself: the deck's BADGE tab sends finished frames over BLE
 // (src/ble/badge.js) into screen slots, kept in flash, and this shows them.
 //
-//   slot 0     the login QR (guest page)          kept until replaced
-//   slot 1     the STEAMWorkz card (two QRs)      kept until replaced
+//   slot 0     SPLASH: the rig's intro / artwork   kept until replaced
+//   slot 1     (unused: was the STEAMWorkz card)
 //   slots 2-5  the last four guest portraits      a ring: a new one replaces the oldest
 //   slot 6     an invite: WANNA EDGERUN? + QR + a one-time password; stays up until the
 //              deck puts the login QR back (the password used, revoked or expired)
@@ -13,7 +13,8 @@
 //   WORN   a new portrait (or the scores) shows for `hold` seconds, then the login QR
 //   TABLE  photo frame: a slideshow, login QR -> scores -> each portrait -> login QR...,
 //          `hold` seconds each; a new portrait jumps the queue
-// Buttons: KEY 1 steps login QR -> STEAMWorkz card -> scores; KEY 2 the next slide.
+// Keys = the deck's BADGE menu: KEY 1 SPLASH, KEY 2 SCORES, KEY 3 PORTRAIT (again: the next
+// one), BOOT the last INVITE (to put a code back up if it didn't show right).
 //
 // Build (Arduino IDE):
 //   board    ESP32 Dev Module, PSRAM: Enabled, Partition: Huge APP (3MB No OTA/1MB SPIFFS)
@@ -41,6 +42,8 @@
 #define BATT_PIN     36
 #define KEY_1        34      // T5 4.7" (ESP32) side keys; check against your board's silkscreen
 #define KEY_2        35
+#define KEY_3        39
+#define KEY_BOOT     0       // the BOOT key: only special at power-up, a plain key after
 #define FRAME_BYTES  (EPD_WIDTH * EPD_HEIGHT / 2)     // 259 200
 #define MAX_PACKED   (FRAME_BYTES + FRAME_BYTES / 128 + 16)
 #define SLOTS        8
@@ -128,14 +131,14 @@ static int nextSlide(int from) {
   return 0;
 }
 
-/** KEY 1: login QR -> card -> scores -> login QR (skipping any not saved yet). */
-static int nextScreen(int from) {
-  const int order[] = {0, 1, SCORES_SLOT};
-  int i = 0;
-  while (i < 3 && order[i] != from) i++;
-  if (i == 3) return 0;                  // from a portrait / an invite: back to login
-  for (int k = 1; k < 3; k++) if (hasSlot(order[(i + k) % 3])) return order[(i + k) % 3];
-  return 0;
+/** KEY 3: the next stored portrait after the one showing (the first, from anything else). */
+static int nextPortrait(int from) {
+  int start = isGuest(from) ? from : LAST_GUEST;
+  for (int k = 1; k <= LAST_GUEST - FIRST_GUEST + 1; k++) {
+    int s = FIRST_GUEST + (start - FIRST_GUEST + k) % (LAST_GUEST - FIRST_GUEST + 1);
+    if (hasSlot(s)) return s;
+  }
+  return -1;
 }
 
 static void saveSettings() {
@@ -200,6 +203,8 @@ void setup() {
   Serial.begin(115200);
   pinMode(KEY_1, INPUT);
   pinMode(KEY_2, INPUT);
+  pinMode(KEY_3, INPUT);
+  pinMode(KEY_BOOT, INPUT_PULLUP);
   frame = (uint8_t *)ps_malloc(FRAME_BYTES);
   packed = (uint8_t *)ps_malloc(MAX_PACKED);
   if (!frame || !packed) {
@@ -298,17 +303,17 @@ void loop() {
     say(s);
   }
 
-  // The keys (active low; debounced by only acting on a fresh press).
-  static bool k1Was = true, k2Was = true;
-  bool k1 = digitalRead(KEY_1), k2 = digitalRead(KEY_2);
-  if (!k1 && k1Was) showSlot(nextScreen(showing));
-  if (!k2 && k2Was) {
-    int s = nextSlide(showing);
-    if (s == 0) s = nextSlide(0);        // KEY 2 is for portraits: skip the login QR
-    if (s) showSlot(s);
+  // The keys = the BADGE menu (active low; a fresh press only, so holding one doesn't repeat).
+  static const int keys[4] = {KEY_1, KEY_2, KEY_3, KEY_BOOT};
+  static bool was[4] = {true, true, true, true};
+  for (int k = 0; k < 4; k++) {
+    bool up = digitalRead(keys[k]);
+    if (!up && was[k]) {
+      int s = k == 0 ? 0 : k == 1 ? SCORES_SLOT : k == 2 ? nextPortrait(showing) : INVITE_SLOT;
+      if (s >= 0 && hasSlot(s)) showSlot(s);
+    }
+    was[k] = up;
   }
-  k1Was = k1;
-  k2Was = k2;
 
   // Timing: WORN puts the login QR back after a portrait; TABLE moves the slideshow on.
   // An invite stays until the deck takes it down.

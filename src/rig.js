@@ -7,7 +7,10 @@ import { Clue } from './ble/clue.js';
 import { Badge } from './ble/badge.js';
 import { Bolt } from './ble/bolt.js';
 import { SpotLed } from './ble/spotled.js';
-import { BRIGHTNESS, BREATHE_IDX, DEFAULT_HACK_TIMER, DEFAULT_PAIR, DEFAULT_RAINBOW, POWER, SETS, TUNE, cmd, look, tuneOf } from './config.js';
+import { Motor } from './motors/ble.js';
+import { MotorController } from './motors/controller.js';
+import { DEFAULT_MOTORS } from './motors/motions.js';
+import { BRIGHTNESS, BREATHE_IDX, DEFAULT_HACK_TIMER, DEFAULT_PAIR, DEFAULT_RAINBOW, POWER, SETS, TUNE, cmd, look, tuneOf, ALL_SHOWN, MIN_SHOWN } from './config.js';
 import { PIC_MS, TEXT_MS, indexed } from './library.js';
 import { RECIPE_KEYS, recipe } from './recipes.js';
 import { ascii } from './i18n.js';
@@ -56,10 +59,14 @@ export class Rig extends EventTarget {
       hackTimer: saved.hackTimer ?? DEFAULT_HACK_TIMER,
       tunes: saved.tunes ?? {},          // only modes the user changed: key -> {bright, colors}
       muted: saved.muted ?? false,       // silences the CLUE + mask (sent on every connect)
+      shown: saved.shown ?? { ...ALL_SHOWN },   // SET -> ANIMATIONS (sent on every connect)
       sandbox: saved.sandbox ?? false,   // the virus never starts (sent on every connect)
       showCmd: saved.showCmd ?? true,    // eggs: hat / BOLT show the /command before the look
       bolt: { ...DEFAULT_BOLT, ...saved.bolt, content: { ...DEFAULT_BOLT.content, ...saved.bolt?.content } },
       hat: { ...DEFAULT_HAT, ...saved.hat },
+      motors: { ...DEFAULT_MOTORS, ...saved.motors, links: { ...DEFAULT_MOTORS.links, ...saved.motors?.links },
+        off: { ...saved.motors?.off }, tune: { ...saved.motors?.tune }, match: { ...saved.motors?.match },
+        sound: { ...DEFAULT_MOTORS.sound, ...saved.motors?.sound } },
       power: POWER.ON,
       hacked: false,
     };
@@ -69,12 +76,15 @@ export class Rig extends EventTarget {
     this.bolt = new Bolt();
     this.clue = new Clue();
     this.badge = new Badge();
-    this.devices = [this.clue, this.cap, this.bolt, this.badge]; // also the Connect-all order
+    this.motor = new Motor();
+    this.devices = [this.clue, this.cap, this.bolt, this.badge, this.motor]; // reconnected on start (restoreAll)
+    this.motors = new MotorController(this);   // what the motors do (src/motors/)
 
     this.clue.addEventListener('ready', async () => {
       this.clue.send(cmd.time());           // the CLUE has no battery clock: set it
       this.clue.send(cmd.mute(this.state.muted));
       this.clue.send(cmd.sandbox(this.state.sandbox));
+      this.clue.send(cmd.shown(this.state.shown));
       await this.clue.applyState();
       for (const k of Object.keys(this.state.tunes)) this.clue.send(this._tuneCmd(k));  // CLUE -> mask
     });
@@ -117,6 +127,7 @@ export class Rig extends EventTarget {
       if (r.pair) patch.pair = r.pair;
       if (r.rainbow) patch.rainbow = r.rainbow;
       if (r.hackTimer) patch.hackTimer = r.hackTimer;
+      if (r.cycle) patch.cycle = r.cycle;
       if (r.power) patch.power = r.power;
       if ('hacked' in r) patch.hacked = r.hacked;
       this._update(patch);
@@ -131,8 +142,8 @@ export class Rig extends EventTarget {
   }
 
   _save() {
-    const { set, idx, pair, rainbow, hackTimer, tunes, muted, sandbox, showCmd, bolt, hat } = this.state;
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ set, idx, pair, rainbow, hackTimer, tunes, muted, sandbox, showCmd, bolt, hat })); } catch {}
+    const { set, idx, pair, rainbow, hackTimer, tunes, muted, sandbox, shown, showCmd, bolt, hat, motors } = this.state;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ set, idx, pair, rainbow, hackTimer, tunes, muted, sandbox, shown, showCmd, bolt, hat, motors })); } catch {}
   }
 
   /** What the rig looks like right now, for the devices that follow it. */
@@ -144,11 +155,13 @@ export class Rig extends EventTarget {
 
   _update(patch) {
     const before = this._rigSig(), wasHacked = this.state.hacked;
+    if (patch.rainbow) this.motors.rainbowChanged(patch.rainbow);
     Object.assign(this.state, patch);
     this._save();
     this.dispatchEvent(new CustomEvent('change', { detail: this.state }));
     // The virus takes over the hat and BOLT even on OWN content, and gives it back on purge.
     const takeover = this.state.hacked !== wasHacked;
+    this.motors.follow();
     if (this._rigSig() !== before) {
       if (this.state.bolt.follow || takeover) this.pushBolt();
       if (this.state.hat.follow || takeover) this.pushCap();
@@ -323,6 +336,27 @@ export class Rig extends EventTarget {
   }
 
   /** How often the virus hijacks on its own. Works while hacked too (it's a setting). */
+  /** SET -> ANIMATIONS: switch mode i of a set on / off. false if that would leave fewer
+   *  than MIN_SHOWN on. */
+  setShown(set, i, on) {
+    const mask = on ? this.state.shown[set] | (1 << i) : this.state.shown[set] & ~(1 << i);
+    const count = SETS[set].modes.filter((_, k) => (mask >> k) & 1).length;
+    if (count < MIN_SHOWN) return false;
+    const shown = { ...this.state.shown, [set]: mask };
+    this.clue.send(cmd.shown(shown));
+    this._update({ shown });
+    return true;
+  }
+
+  /** CYCLE: send a sequence to the CLUE (it keeps it) and start it. steps: [{ set, i, s }] */
+  runCycle(steps) {
+    if (this.locked) return false;
+    this.clue.send(cmd.cycle(steps));
+    this.clue.send(cmd.cycleGo(true));
+    return true;
+  }
+  stopCycle() { this.clue.send(cmd.cycleGo(false)); }
+
   setHackTimer(t) {
     this.clue.send(cmd.hackTimer(t));
     this._update({ hackTimer: t });
@@ -424,12 +458,9 @@ export class Rig extends EventTarget {
 
   /** Reconnect devices Chrome already granted, without a picker. */
   restoreAll() {
-    return Promise.all(this.devices.map((d) => d.restore()));
+    return Promise.all(this.devices.filter((d) => d !== this.motor || this.state.motors.on).map((d) => d.restore()));
   }
 
-  nextUnconnected() {
-    return this.devices.find((d) => !d.device);
-  }
 }
 
 export { SETS };

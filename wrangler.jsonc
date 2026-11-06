@@ -1,8 +1,6 @@
 // The Cyber Deck site on Cloudflare: a Worker that only serves the built files (dist/:
-// the deck, guest.html, viz/), with public/_headers' security headers. Cloudflare's
-// Git integration builds it from this repo:
-//   build command   BASE=/ npm run build
-//   deploy command  npx wrangler deploy
+// the deck, guest.html, viz/), with public/_headers' security headers. Deployed from the PC:
+//   npm run deploy   (builds, then deploys this and the relay)
 // The guest relay is its own Worker (worker/relay, relay.steamworkz.net).
 // Two names, one site: deck. is the owner's (behind Cloudflare Access, a login), jack.
 // is for guests (no login); guest links and QRs use jack. (src/guests.js).

@@ -23,6 +23,8 @@
 html,body{background:var(--abyss);color:var(--ink)}
 /* Embedded in the rig's guest page: only the arcade, filling the screen */
 .embed header,.embed .guide{display:none!important}
+.embed,.embed body{overflow:hidden;overscroll-behavior:none;height:100%}
+.embed .stage{touch-action:none}
 .embed .wrap{max-width:none;padding:0;margin:0}
 .embed .stage{height:100vh;height:100dvh;aspect-ratio:auto;border-radius:0;margin:0;box-shadow:none}
 body{font-family:var(--body);font-size:16px;line-height:1.55}
@@ -154,7 +156,11 @@ code{font-family:var(--display);font-size:.88em;background:var(--abyss);padding:
 <script>
 const EMBED=new URLSearchParams(location.search).has('embed');
 const tell=m=>{if(EMBED)parent.postMessage(m,location.origin);};   // to the guest page (the rig plays along)
-if(EMBED)document.documentElement.classList.add('embed');
+if(EMBED){
+  document.documentElement.classList.add('embed');
+  // Some phones still scroll on a swipe: the stage is the game's, so the page never moves.
+  document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+}
 
 (function(){
 const COLORS=[

@@ -1,14 +1,16 @@
 // BADGE tab: the e-ink badge's screens, drawn here at the badge's own 540 x 960
 // (portrait) and sent finished into the badge's slots; the badge only shows them.
-//   LOGIN  slot 0: the guest QR (guests.js link), the callsign and a JACK IN bar
-//   CARD   slot 1: the STEAMWorkz card: a LINK QR (your site / socials, SET -> BADGE) and
-//          the guest page's; with no link set, just the guest QR, bigger
+//   SPLASH  slot 0, between guests: INTRO (the rig introduced) or ARTWORK (your own picture,
+//           cropped / contrast / dithered), with an optional QR strip (join + your LINK QR)
+//   INVITES the last five access codes; SHOW puts a waiting one back up (slot 6)
 //   PHOTO  a guest portrait (slots 2-5, the badge keeps the last four): any picture,
 //          cropped (drag it / ZOOM), contrast, 16 greys with dithering
 //   SCORES slot 7: HIGH SCORES from DEBUG; refreshed quietly after each win, shown on a
 //          NEW RECORD so the winner can photograph it
-// KEY 1 on the badge steps LOGIN -> CARD -> SCORES; KEY 2 steps through the portraits. WORN /
-// TABLE (SET → BADGE) decides what happens after a portrait.
+// INVITE (slot 6) is the guest bar's WANNA EDGERUN?, put up and taken down from main.js.
+// The badge's keys open the same screens: KEY 1 SPLASH, KEY 2 SCORES, KEY 3 PORTRAIT (again:
+// the next), BOOT the last INVITE. WORN /
+// TABLE, HOLD, HANGS, CALLSIGN and LINK QR live in SET → BADGE.
 
 import qrcode from 'qrcode-generator';
 import { decodeImage, badgeCrop, toGrey16, packBadge, paintGrey, BADGE } from './image.js';
@@ -18,56 +20,35 @@ import { words } from './i18n.js';
 
 const STORE_KEY = 'rig-badge';
 const DEFAULTS = {
-  kind: 'login', callsign: 'MODERNDAYHERO', turn: 'cw', zoom: 1, panX: 0, panY: 0, contrast: 1.2, brightness: 0,
+  kind: 'splash', look: 'intro', qrStrip: true,
+  art: { zoom: 1, panX: 0, panY: 0, contrast: 1.2, brightness: 0, dither: true },
+  callsign: 'MODERNDAYHERO', turn: 'cw', zoom: 1, panX: 0, panY: 0, contrast: 1.2, brightness: 0,
   dither: true, mode: 0, hold: 180, link: '',
 };
-const KIND_SLOT = { login: SLOT.LOGIN, card: SLOT.CARD, scores: SLOT.SCORES, photo: SLOT.GUEST };
+const KIND_SLOT = { splash: SLOT.SPLASH, scores: SLOT.SCORES, photo: SLOT.GUEST, invites: null };
 const mmss = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
-export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
+export function setupBadge({ rig, host, $, segPick, segShow, showBanner, showInvite }) {
   const badge = rig.badge;
   let st = { ...DEFAULTS };
   try { st = { ...st, ...JSON.parse(localStorage.getItem(STORE_KEY)) }; } catch {}
   delete st.repo;                       // the old CODE QR (the repo is private now)
+  if (!(st.kind in KIND_SLOT)) st.kind = 'splash';   // LOGIN QR / CARD / HOME became SPLASH
+  st.art = { ...DEFAULTS.art, ...st.art };
   const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(st)); } catch {} };
-  let photo = null, grey = null;
+  let photo = null, art = null, grey = null;    // the portrait / the splash artwork (memory only)
+  // The picture being adjusted (ZOOM, drag...) and its settings: the portrait's or the artwork's.
+  const pic = () => (st.kind === 'splash' ? art : photo);
+  const adj = () => (st.kind === 'splash' ? st.art : st);
+  const adjusting = () => st.kind === 'photo' || (st.kind === 'splash' && st.look === 'art');
   const work = document.createElement('canvas');
   work.width = BADGE.w;
   work.height = BADGE.h;
   const g = work.getContext('2d', { willReadFrequently: true });
   const font = getComputedStyle(document.body).fontFamily;
 
-  /** The login screen: black on white, the QR big enough to scan across a room. */
-  function drawLogin() {
-    const { w, h } = BADGE;
-    g.fillStyle = '#fff';
-    g.fillRect(0, 0, w, h);
-    g.fillStyle = '#000';
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.font = `700 26px ${font}`;
-    g.fillText('STEAMWorkz // NETRUNNER', w / 2, 62);
-
-    const qr = qrcode(0, 'M');
-    qr.addData(host.link);
-    qr.make();
-    const n = qr.getModuleCount(), size = 460, cell = Math.floor(size / n), q = cell * n;
-    const x0 = (w - q) / 2, y0 = 110 + (size - q) / 2;
-    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) g.fillRect(x0 + c * cell, y0 + r * cell, cell, cell);
-
-    let px = 64;                                  // callsign, as big as fits
-    do g.font = `700 ${px--}px ${font}`; while (g.measureText(st.callsign).width > w - 50 && px > 20);
-    g.fillText(st.callsign, w / 2, 640);
-
-    g.fillRect(24, 700, w - 48, 110);
-    g.fillStyle = '#fff';
-    g.font = `700 64px ${font}`;
-    g.fillText('JACK IN', w / 2, 757);
-    g.fillStyle = '#555';
-    g.font = `22px ${font}`;
-    g.fillText('scan  ·  ask to jack in  ·  play the rig', w / 2, 860);
-    g.fillText(host.enabled ? 'GUEST PORT OPEN' : 'guest port opens at the party', w / 2, 900);
-  }
+  /** The address a QR goes to, short enough to read and type: jack.steamworkz.net */
+  const shortUrl = (u) => { try { const x = new URL(u); return (x.host + x.pathname).replace(/\/(guest\.html)?$/, ''); } catch { return u; } };
 
   /** One QR, black on white, `size` px square, centred at (cx, y). */
   function drawQr(text, cx, y, size) {
@@ -80,38 +61,98 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
     return q;
   }
 
-  /** The STEAMWorkz card: who's wearing it, the code behind it, and the way in. */
-  function drawCard() {
+  /** The QR strip along the bottom: the join QR, and your LINK QR beside it if there is one. */
+  function drawQrStrip(top) {
     const { w, h } = BADGE;
+    g.fillStyle = '#fff';
+    g.fillRect(0, top, w, h - top);
+    g.fillStyle = '#000';
+    g.fillRect(0, top, w, 4);
+    const size = Math.min(170, h - top - 70), y = top + 22;
+    const cells = st.link ? [[st.link, 'FOLLOW'], [host.link, 'JOIN IN']] : [[host.link, 'JOIN IN']];
+    cells.forEach(([url, label], k) => {
+      const cx = st.link ? (k ? w * 0.72 : w * 0.28) : w * 0.3;
+      const q = drawQr(url, cx, y, size);
+      g.textAlign = 'center';
+      g.font = `700 22px ${font}`;
+      g.fillText(label, cx, y + q + 22);
+    });
+    if (!st.link) {                         // one QR: the callsign beside it
+      g.textAlign = 'left';
+      g.font = `700 28px ${font}`;
+      g.fillText('SCAN TO', w * 0.55, y + 50);
+      g.fillText('JOIN IN', w * 0.55, y + 86);
+      g.font = `20px ${font}`;
+      g.fillText('ask for an access code', w * 0.55, y + 126);
+    }
+  }
+
+  /** SPLASH: the badge between guests. INTRO introduces the rig; ARTWORK is your picture. */
+  function drawSplash() {
+    const { w, h } = BADGE, strip = st.qrStrip ? 740 : h;
+    g.textBaseline = 'middle';
+    if (st.look === 'art') {
+      if (art) badgeCrop(g, art, st.art);
+      else {
+        g.fillStyle = '#fff';
+        g.fillRect(0, 0, w, h);
+        g.fillStyle = '#000';
+        g.textAlign = 'center';
+        g.font = `700 30px ${font}`;
+        g.fillText('PICK ARTWORK', w / 2, strip / 2);
+      }
+      if (st.qrStrip) drawQrStrip(strip);
+      return;
+    }
     g.fillStyle = '#fff';
     g.fillRect(0, 0, w, h);
     g.fillStyle = '#000';
-    g.fillRect(0, 0, w, 120);
+    g.fillRect(0, 0, w, 150);
     g.fillStyle = '#fff';
     g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.font = `700 52px ${font}`;
-    g.fillText('STEAMWorkz', w / 2, 50);
-    g.font = `22px ${font}`;
-    g.fillText('CYBER RIG // NIGHT CITY', w / 2, 96);
+    g.font = `700 60px ${font}`;
+    g.fillText('STEAMWorkz', w / 2, 60);
+    g.font = `24px ${font}`;
+    g.fillText('CYBER RIG  //  NIGHT CITY EDITION', w / 2, 118);
     g.fillStyle = '#000';
-    let px = 46;
+    g.font = `700 26px ${font}`;
+    g.fillText('A LIGHT-UP CYBERPUNK COSTUME', w / 2, 200);
+    const parts = [['MASK', 'reactive light intakes'], ['HAT', '32×16 LED display'], ['WATCH', 'runs the whole rig'],
+      ['BOLT', 'a rolling robot sidekick'], ['BADGE', 'this e-ink screen']];
+    const gap = st.qrStrip ? 72 : 96, y0 = st.qrStrip ? 270 : 300;
+    parts.forEach(([name, what], k) => {
+      const y = y0 + k * gap;
+      g.textAlign = 'left';
+      g.font = `700 30px ${font}`;
+      g.fillText(name, 56, y);
+      g.font = `24px ${font}`;
+      g.fillText(what, 190, y);
+      g.fillRect(56, y + 26, w - 112, 1);
+    });
+    g.textAlign = 'center';
+    let px = 40;                             // the callsign, as big as fits
     do g.font = `700 ${px--}px ${font}`; while (g.measureText(st.callsign).width > w - 60 && px > 18);
-    g.fillText(st.callsign, w / 2, 168);
-
-    g.font = `700 24px ${font}`;
-    if (st.link) {                        // two QRs: your site / socials, and the way in
-      g.fillText('FOLLOW // STEAMWorkz', w / 2, 226);
-      drawQr(st.link, w / 2, 250, 290);
-      g.fillText('JACK IN // GUESTS', w / 2, 590);
-      drawQr(host.link, w / 2, 614, 290);
-    } else {                              // no link set (SET -> BADGE): just the way in, bigger
-      g.fillText('JACK IN // GUESTS', w / 2, 236);
-      drawQr(host.link, w / 2, 270, 600);
+    g.fillText(st.callsign, w / 2, st.qrStrip ? 690 : 860);
+    if (st.qrStrip) drawQrStrip(strip);
+    else {
+      g.font = `22px ${font}`;
+      g.fillText('ask about the rig  ·  ask to play', w / 2, 910);
     }
-    g.fillStyle = '#555';
-    g.font = `20px ${font}`;
-    g.fillText('ask the netrunner for a password', w / 2, 936);
+  }
+
+  /** INVITES' preview: the newest code still waiting, as the badge shows it. */
+  function drawInvitesPreview() {
+    const v = host.recentInvites().find((r) => r.live);
+    if (v) return drawInvite(v.live);
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, BADGE.w, BADGE.h);
+    g.fillStyle = '#000';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = `700 30px ${font}`;
+    g.fillText('NO CODE WAITING', BADGE.w / 2, 440);
+    g.font = `24px ${font}`;
+    g.fillText('INVITE (guest bar) makes one', BADGE.w / 2, 490);
   }
 
   /** INVITE: WANNA EDGERUN?, the guest QR and this guest's one-time password, big. */
@@ -129,9 +170,9 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
     g.font = `24px ${font}`;                     // Night City: every script on the street
     g.fillText(['ja', 'ko', 'zh-TW', 'vi'].map((l) => words(l).jackIn).join('  ·  '), w / 2, 112);
     g.fillStyle = '#000';
-    drawQr(host.link, w / 2, 190, 420);
+    drawQr(host.inviteLink(v), w / 2, 190, 420);   // scanning it fills the code in
     g.font = `700 26px ${font}`;
-    g.fillText('PASSWORD', w / 2, 650);
+    g.fillText('ACCESS CODE', w / 2, 650);
     g.font = `700 104px ${font}`;
     g.fillText(showCode(v.code), w / 2, 735);
     g.fillRect(40, 800, w - 80, 4);
@@ -183,20 +224,20 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
     g.fillText('THINK YOU', 240, 790);
     g.fillText('CAN BEAT IT?', 240, 830);
     g.font = `24px ${font}`;
-    g.fillText('ask for a password', 240, 874);
+    g.fillText('ask for an access code', 240, 874);
     g.font = `700 22px ${font}`;
     g.fillText(st.callsign, 240, 912);
   }
 
   function render() {
-    if (st.kind === 'login') drawLogin();
-    else if (st.kind === 'card') drawCard();
+    if (st.kind === 'splash') drawSplash();
     else if (st.kind === 'scores') drawScores();
+    else if (st.kind === 'invites') drawInvitesPreview();
     else if (photo) badgeCrop(g, photo, st);
     else { g.fillStyle = '#fff'; g.fillRect(0, 0, BADGE.w, BADGE.h); }
     const img = g.getImageData(0, 0, BADGE.w, BADGE.h);
-    // The QR screens are already black and white: no dither, no contrast games.
-    grey = st.kind !== 'photo' ? toGrey16(img, { dither: false }) : toGrey16(img, st);
+    // Pictures get contrast + dithering; the text / QR screens are black and white already.
+    grey = adjusting() ? toGrey16(img, adj()) : toGrey16(img, { dither: false });
     paintGrey($('badgePreview'), grey);
   }
   let pending = 0;
@@ -204,10 +245,16 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
 
   function show() {
     segShow('badgeKind', 'kind', st.kind);
-    segShow('badgeDither', 'dither', st.dither ? 1 : 0);
+    segShow('badgeDither', 'dither', adj().dither ? 1 : 0);
     segShow('badgeTurn', 'turn', st.turn);
     for (const p of document.querySelectorAll('#view-badge [data-pane]')) p.hidden = !p.dataset.pane.split(' ').includes(st.kind);
-    $('badgeSend').firstChild.textContent = { login: 'SAVE AS LOGIN SCREEN', card: 'SAVE AS CARD', scores: 'SAVE AS SCORES', photo: 'SEND AS PORTRAIT' }[st.kind];
+    $('badgeAdjust').hidden = !adjusting();
+    segShow('splashLook', 'look', st.look);
+    segShow('splashQr', 'qr', st.qrStrip ? 1 : 0);
+    $('splashArtPick').hidden = st.look !== 'art';
+    $('badgeSend').parentElement.hidden = st.kind === 'invites';
+    $('badgeSend').firstChild.textContent = { splash: 'SAVE AS SPLASH', scores: 'SAVE AS SCORES', photo: 'SEND AS PORTRAIT' }[st.kind] || '';
+    renderInvites();
     segShow('badgeMode', 'mode', st.mode);
     $('badgeHold').value = st.hold;
     $('badgeHoldOut').textContent = st.hold >= 60 ? `${Math.round(st.hold / 6) / 10} min` : `${st.hold} s`;
@@ -215,14 +262,29 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
     $('badgeCall').value = st.callsign;
     for (const [id, k, f] of [['badgeZoom', 'zoom', (v) => `${Math.round(v * 100)}%`],
       ['badgeContrast', 'contrast', (v) => `${Math.round(v * 100)}%`], ['badgeBright', 'brightness', (v) => `${v > 0 ? '+' : ''}${v}`]]) {
-      $(id).value = st[k];
-      $(id + 'Out').textContent = f(st[k]);
+      $(id).value = adj()[k];
+      $(id + 'Out').textContent = f(adj()[k]);
     }
     renderSoon();
   }
 
   segPick('badgeKind', 'kind', (k) => { st.kind = k; save(); show(); });
-  segPick('badgeDither', 'dither', (v) => { st.dither = v === '1'; save(); show(); });
+  segPick('badgeDither', 'dither', (v) => { adj().dither = v === '1'; save(); show(); });
+  segPick('splashLook', 'look', (v) => { st.look = v; save(); show(); });
+  segPick('splashQr', 'qr', (v) => { st.qrStrip = v === '1'; save(); show(); });
+  $('splashFile').addEventListener('change', async () => {
+    const file = $('splashFile').files[0];
+    if (!file) return;
+    try {
+      [{ image: art }] = await decodeImage(file, 1);
+      Object.assign(st.art, { zoom: 1, panX: 0, panY: 0 });
+      st.look = 'art';
+      save();
+      show();
+    } catch (err) {
+      showBanner(`Couldn't read that image: ${err.message}`);
+    }
+  });
   segPick('badgeTurn', 'turn', (v) => { st.turn = v; save(); show(); });
   $('badgeLink').addEventListener('change', () => {
     const v = $('badgeLink').value.trim();
@@ -240,7 +302,7 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
     renderSoon();
   });
   for (const [id, k] of [['badgeZoom', 'zoom'], ['badgeContrast', 'contrast'], ['badgeBright', 'brightness']]) {
-    $(id).addEventListener('input', () => { st[k] = Number($(id).value); save(); show(); });
+    $(id).addEventListener('input', () => { adj()[k] = Number($(id).value); save(); show(); });
   }
   $('badgeFile').addEventListener('change', async () => {
     const file = $('badgeFile').files[0];
@@ -259,17 +321,17 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
   let drag = null;
   const cv = $('badgePreview');
   cv.addEventListener('pointerdown', (e) => {
-    if (st.kind !== 'photo' || !photo) return;
-    drag = { x: e.clientX, y: e.clientY, panX: st.panX, panY: st.panY };
+    if (!adjusting() || !pic()) return;
+    drag = { x: e.clientX, y: e.clientY, panX: adj().panX, panY: adj().panY };
     cv.setPointerCapture(e.pointerId);
   });
   cv.addEventListener('pointermove', (e) => {
     if (!drag) return;
     const r = cv.getBoundingClientRect();
     // Moving a full preview width shifts the photo by its whole spare width (pan -1..1).
-    const k = 2 / Math.max(0.2, st.zoom);
-    st.panX = Math.max(-1, Math.min(1, drag.panX + ((e.clientX - drag.x) / r.width) * k * -1));
-    st.panY = Math.max(-1, Math.min(1, drag.panY + ((e.clientY - drag.y) / r.height) * k * -1));
+    const a = adj(), k = 2 / Math.max(0.2, a.zoom);
+    a.panX = Math.max(-1, Math.min(1, drag.panX + ((e.clientX - drag.x) / r.width) * k * -1));
+    a.panY = Math.max(-1, Math.min(1, drag.panY + ((e.clientY - drag.y) / r.height) * k * -1));
     renderSoon();
   });
   const endDrag = () => { if (drag) { drag = null; save(); } };
@@ -280,6 +342,7 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
   $('badgeSend').addEventListener('click', async () => {
     if (!badge.connected) return showBanner('Connect the badge first (tap the Badge chip).');
     if (st.kind === 'photo' && !photo) return showBanner('Pick a photo first.');
+    if (st.kind === 'splash' && st.look === 'art' && !art) return showBanner('Pick the artwork first.');
     render();
     $('badgeSend').disabled = true;
     try {
@@ -296,8 +359,35 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
     if (!badge.connected) return showBanner('Connect the badge first (tap the Badge chip).');
     badge.show(slot).catch(() => showBanner(`The badge has no ${what} yet: SAVE one first.`));
   };
-  $('badgeShowLogin').addEventListener('click', showSlot(SLOT.LOGIN, 'login screen'));
-  $('badgeShowCard').addEventListener('click', showSlot(SLOT.CARD, 'card'));
+  $('badgeShowSplash').addEventListener('click', showSlot(SLOT.SPLASH, 'splash screen'));
+
+  // ---------- INVITES: the last five codes ----------
+  const INV_STATE = { waiting: 'waiting', used: 'used', revoked: 'revoked', expired: 'expired' };
+  function renderInvites() {
+    if (st.kind !== 'invites') return;
+    const rows = host.recentInvites().map((r) => {
+      const row = document.createElement('div');
+      row.className = `gitem ${r.live ? 'pending' : ''}`;
+      const who = document.createElement('span');
+      who.className = 'who';
+      who.textContent = showCode(r.code);
+      const sub = document.createElement('small');
+      sub.textContent = r.live ? `waiting · ${mmss(r.live.until - Date.now())} left` : r.by ? `used by ${r.by}` : INV_STATE[r.state];
+      who.append(sub);
+      row.append(who);
+      if (r.live) {
+        const b = document.createElement('button');
+        b.className = 'yes';
+        b.textContent = 'SHOW';
+        b.addEventListener('click', () => showInvite?.(r.live));
+        row.append(b);
+      }
+      return row;
+    });
+    $('badgeInvites').replaceChildren(...rows);
+    if (!rows.length) $('badgeInvites').textContent = 'No codes yet: INVITE in the guest bar makes one.';
+  }
+  setInterval(() => { if (st.kind === 'invites') { renderInvites(); renderSoon(); } }, 5000);
   $('badgeShowScores').addEventListener('click', showSlot(SLOT.SCORES, 'scores'));
   badge.addEventListener('ready', sendMode);           // the badge learns WORN / TABLE on connect
   badge.addEventListener('progress', (e) => {
@@ -309,13 +399,16 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
     const portraits = i ? [2, 3, 4, 5].filter((s) => i.slots & (1 << s)).length : 0;
     $('badgeInfo').textContent = badge.connected
       ? `Linked${i?.mv ? `, battery ${(i.mv / 1000).toFixed(2)} V` : ''}` +
-        (i ? `. Saved: ${i.slots & 1 ? 'login' : 'no login'}, ${i.slots & 2 ? 'card' : 'no card'}, ${portraits} portrait${portraits === 1 ? '' : 's'}.` : '.') +
+        (i ? `. Saved: ${i.slots & 1 ? 'splash' : 'no splash'}, ${i.slots & 128 ? 'scores' : 'no scores'}, ${portraits} portrait${portraits === 1 ? '' : 's'}.` : '.') +
         ' A full picture takes about 10–20 s; showing a saved one is instant.'
       : 'Not linked: tap the Badge chip at the top.';
   };
   badge.addEventListener('info', info);
   badge.addEventListener('status', info);
-  host.addEventListener('change', () => { if (st.kind === 'login' || st.kind === 'scores') renderSoon(); });
+  host.addEventListener('change', () => {
+    if (st.kind !== 'photo') renderSoon();
+    renderInvites();
+  });
   info();
   show();
 
@@ -331,21 +424,21 @@ export function setupBadge({ rig, host, $, segPick, segShow, showBanner }) {
     onBadge = v.code;
     try {
       await badge.sendFrame(frame, SLOT.INVITE);
-      if (onBadge !== v.code) await badge.show(SLOT.LOGIN);   // used up while it was sending
+      if (onBadge !== v.code) await badge.show(SLOT.SPLASH);  // used up while it was sending
       return true;
     } catch (err) {
       showBanner(`Badge: ${err.message}`);
       return false;
     }
   }
-  // The password is gone (used, revoked, expired, GUESTS off): the login QR goes back up.
+  // The code is gone (used, revoked, expired, GUESTS off): SPLASH goes back up.
   host.addEventListener('change', () => {
     if (!onBadge || host.invites.some((v) => v.code === onBadge)) return;
     onBadge = null;
-    if (badge.connected && !badge.busy) badge.show(SLOT.LOGIN).catch(() => {});
+    if (badge.connected && !badge.busy) badge.show(SLOT.SPLASH).catch(() => {});
   });
   // ---------- HIGH SCORES on the badge: refreshed after every win ----------
-  // A new top time puts them on the badge (WORN: for HOLD, then back to login); any other
+  // A new top time puts them on the badge (WORN: for HOLD, then back to SPLASH); any other
   // change is saved quietly for KEY 1 / the slideshow. A busy badge gets it on the next try.
   let scoresSig = JSON.stringify(host.board), topSig = JSON.stringify(host.board[0] || null), scoresDue = null;
   async function sendScores(show) {

@@ -29,21 +29,21 @@
 // language, first / last seen, DEBUG wins, losses and best time, and the pictures they sent
 // (the last few each, marked shown or not). It outlives their certificates; CLEAR empties it.
 //
-// The link is ntfy.sh (no server of our own): guests post to the session topic, this app
-// listens to it (EventSource) and answers each guest on <topic>-<guest id>; rig news for
-// everyone (firewall, hacked) goes out once on <topic>-all. The topic is random and stays
+// The link is our relay (worker/relay, relay.steamworkz.net): guests post to the session
+// topic, this app listens to it (EventSource) and answers each guest on <topic>-<guest id>;
+// rig news for everyone (firewall, hacked) goes out once on <topic>-all. The topic is random and stays
 // the same across GUESTS off / on (so the badge's QR keeps working); NEW LINK replaces it
 // and every old QR stops working. Anyone holding the QR can read the topic, so the QR alone
 // gets nobody in: the password does, once, and then a token only that phone was sent.
 // Every message is checked here before it reaches the rig.
 
-import { SETS } from './config.js';
+import { SETS, isShown } from './config.js';
 import { PICS, MINE, lookup } from './library.js';
 import { ascii } from './i18n.js';
+import { valueOf } from './motors/motions.js';
 
-// Our own relay (worker/relay on Cloudflare); any ntfy server works too: SET -> GUESTS.
-export const DEFAULT_RELAY = 'https://relay.steamworkz.net';
-const OLD_DEFAULT = 'https://ntfy.sh';     // the first default: its free quota is too small
+// Our relay (worker/relay on Cloudflare).
+export const RELAY = 'https://relay.steamworkz.net';
 // On the live site the owner's deck (deck.) sits behind a login; guests get the same
 // site at jack., which has none.
 const GUEST_SITE = { 'deck.steamworkz.net': 'https://jack.steamworkz.net/' };
@@ -60,11 +60,10 @@ const GAME_GAP = 15000;              // one DEBUG result a guest this often
 const BREACH_GAP = 60000;            // a lost game lets the virus loose at most this often
 const BOARD_SIZE = 10;
 const DEADMAN_MS = 1500;             // a guest driver's messages stop: the BOLT stops
-const WHEEL_MS = 4000;               // the wheel is free again this long after the driver's last move
 export const TURN_SECS = [30, 60, 90, 120];
-export const PERMS = ['modes', 'hack', 'drive', 'up', 'say', 'pic'];
-const OP_PERMS = ['modes', 'hack', 'drive'];   // the operator's, one guest at a time
-const BASIC = { modes: false, hack: false, drive: false, up: false, say: true, pic: true };
+export const PERMS = ['modes', 'hack', 'drive', 'motors', 'up', 'say', 'pic'];
+const OP_PERMS = ['modes', 'hack', 'drive', 'motors'];   // the operator's, one guest at a time
+const BASIC = { modes: false, hack: false, drive: false, motors: false, up: false, say: true, pic: true };
 const ALL = Object.fromEntries(PERMS.map((p) => [p, true]));
 // No 0/O, 1/I/L, 2/Z, 5/S, 8/B: easy to read off a screen and type.
 const CODE_CHARS = 'ACDEFGHJKMNPQRTUVWXY34679';
@@ -101,9 +100,7 @@ export class GuestHost extends EventTarget {
     try { saved = JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch {}
     this.minutes = GUEST_MINUTES.includes(saved.minutes) ? saved.minutes : 10;
     this.topic = saved.topic || null;
-    // A relay saved before ours existed was just the old default: move it over, once.
-    this.relay = saved.relay && !(saved.relay === OLD_DEFAULT && !saved.relayChosen) ? saved.relay : DEFAULT_RELAY;
-    this.relayChosen = !!saved.relayChosen;
+    this.relay = RELAY;              // (a test can point this elsewhere: tools/mock-relay.mjs)
     this.open = false;
     // Guests in (a reload of this page keeps them) and passwords not used yet.
     this.guests = new Map((saved.guests || []).filter(([, x]) => x.until > Date.now()));
@@ -114,20 +111,21 @@ export class GuestHost extends EventTarget {
       x.rounds ||= 0;
     }
     this.invites = (saved.invites || []).filter((v) => v.until > Date.now());   // { code, until }
+    this.recent = saved.recent || [];     // the last five codes made (badge -> INVITES)
     this.queue = [];                 // { n, g, kind: 'say' | 'up', text | pic }
     this._n = 0;
     this._misses = 0;
     this._pausedUntil = 0;
     this._breachAt = 0;
-    this.board = saved.board || [];  // fastest DEBUG wins: { name, ms, saved }
     try { this.runners = JSON.parse(localStorage.getItem(RUNNERS_KEY)) || {}; } catch { this.runners = {}; }
     this.gate = saved.gate === 'open' ? 'open' : 'game';   // 'game': play (or ask) for FULL
     this.letDrive = false;           // LET GUESTS DRIVE (BOLT tab); never kept: a choice each time
-    this._wheel = null;              // { g, at }: the guest driving now
+    this._guestDriving = false;      // the operator has the BOLT rolling
     this.turnSec = TURN_SECS.includes(saved.turnSec) ? saved.turnSec : 60;
     this.turn = null;                // { g, until }: the OPERATOR now
     if (saved.open) this.enable();
 
+    this._watchRelay();
     // Firewall / virus news for every guest (their HACK IT ALL button follows it).
     this._news = '';
     rig.addEventListener('change', () => this._sendNews());
@@ -143,13 +141,20 @@ export class GuestHost extends EventTarget {
     if (import.meta.env?.DEV && typeof __LAN_HOST__ === 'string' && __LAN_HOST__ && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
       here = here.replace(location.hostname, __LAN_HOST__);
     }
-    const via = this.relay === DEFAULT_RELAY ? '' : '@' + new URL(this.relay).host;
-    return `${here}guest.html#${this.topic}${via}`;
+    return `${here}guest.html#${this.topic}`;
   }
 
+  /** An invite's own link: the guest link + its access code, so its QR fills the code in. */
+  inviteLink(v) { return `${this.link}&k=${v.code}`; }
+
   _save() {
-    const { topic, relay, relayChosen, open, minutes, invites, board, gate, turnSec } = this;
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ topic, relay, relayChosen, open, minutes, invites, board, gate, turnSec, guests: [...this.guests] })); } catch {}
+    const { topic, open, minutes, invites, recent, gate, turnSec } = this;
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ topic, open, minutes, invites, recent, gate, turnSec, guests: [...this.guests] })); } catch {}
+  }
+  /** The DEBUG leaderboard, from the runners log: fastest first, { name, ms }. */
+  get board() {
+    return Object.values(this.runners).filter((r) => r.best).map((r) => ({ name: r.name, ms: r.best }))
+      .sort((a, b) => a.ms - b.ms).slice(0, BOARD_SIZE);
   }
   /** This phone's runner record (made on first sight), kept current with their handle. */
   _runner(g, x) {
@@ -169,7 +174,6 @@ export class GuestHost extends EventTarget {
   }
   clearRunners() {
     this.runners = {};
-    this.board = [];
     this._saveRunners();
     this._changed();
   }
@@ -180,19 +184,56 @@ export class GuestHost extends EventTarget {
   }
 
   enable() {
+    if (__AP__) return;                          // the afterparty deck (ap.) has no guests
     void this.link;                              // makes the topic if there isn't one yet
     this.open = true;
+    this._listen();
+    this._news = '';
+    this._sendNews();
+    this._changed();
+  }
+
+  // The link to the relay. It can go quiet without closing (the phone slept, the network
+  // changed): the relay sends a keepalive every 25 s, so a minute of nothing means it's
+  // stale and gets reopened. Waking the phone or getting back online checks it at once.
+  // Only this link restarts: the Bluetooth devices aren't touched.
+  _listen() {
     this.es?.close();
-    this.es = new EventSource(`${this.relay}/${this.topic}/sse`);
-    this.es.onmessage = (e) => {
+    this._alive = Date.now();
+    this._relayState('connecting');
+    const es = this.es = new EventSource(`${this.relay}/${this.topic}/sse`);
+    const alive = () => { this._alive = Date.now(); this._relayState('ok'); };
+    es.onopen = alive;
+    es.addEventListener('keepalive', alive);
+    es.onerror = () => this._relayState('down');   // EventSource retries by itself meanwhile
+    es.onmessage = (e) => {
+      alive();
       try {
         const n = JSON.parse(e.data);
         if (n.event === 'message' && n.topic === this.topic) this._onGuest(JSON.parse(n.message));
       } catch {}
     };
-    this._news = '';
-    this._sendNews();
-    this._changed();
+  }
+  _relayState(s) {
+    if (this.relay_ === s) return;
+    this.relay_ = s;
+    this.dispatchEvent(new Event('relay'));
+  }
+  get relayState() { return this.open ? this.relay_ || 'connecting' : 'off'; }
+
+  /** Reopen the relay link now (the guest bar's link status, tapped). */
+  reconnect() {
+    if (this.open) this._listen();
+  }
+
+  _watchRelay() {
+    const stale = (ms) => this.open && Date.now() - this._alive > ms;
+    setInterval(() => { if (stale(70000)) this._listen(); }, 10000);
+    if (typeof document === 'undefined') return;      // (scripted tests run without a page)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && stale(35000)) this._listen();
+    });
+    window.addEventListener('online', () => this.reconnect());
   }
 
   /** GUESTS off: everyone is sent home and unused passwords die; the link stays. */
@@ -201,6 +242,7 @@ export class GuestHost extends EventTarget {
     this.es?.close();
     this.es = null;
     this.open = false;
+    this._relayState('off');
     this.guests.clear();
     this.invites = [];
     this.queue = [];
@@ -213,13 +255,27 @@ export class GuestHost extends EventTarget {
     if (!this.open) this.enable();
     const v = { code: newCode(), until: Date.now() + INVITE_MS };
     this.invites.push(v);
+    this.recent = [{ code: v.code, until: v.until }, ...this.recent].slice(0, 5);
     this._changed();
     return v;
   }
 
   revokeInvite(code) {
     this.invites = this.invites.filter((v) => v.code !== code);
+    const r = this.recent.find((x) => x.code === code);
+    if (r) r.revoked = true;
     this._changed();
+  }
+
+  /** The last five codes made, newest first, each with how it ended up:
+   *  { code, until, state: 'waiting' | 'used' | 'revoked' | 'expired', by (who used it), live } */
+  recentInvites() {
+    const now = Date.now();
+    return this.recent.map((r) => {
+      const live = this.invites.find((v) => v.code === r.code && v.until > now);
+      const state = live ? 'waiting' : r.by ? 'used' : r.revoked ? 'revoked' : 'expired';
+      return { ...r, state, live };
+    });
   }
 
   /** NEW LINK: a fresh topic. Everyone is sent home and every old QR stops working. */
@@ -230,20 +286,6 @@ export class GuestHost extends EventTarget {
     void this.link;
     if (was) this.enable();
     this._changed();
-  }
-
-  /** Another ntfy server (https://...). The QR changes with it, so everyone is sent home. */
-  setRelay(url) {
-    let u;
-    try { u = new URL(url.trim()); } catch { return false; }
-    if (u.protocol !== 'https:') return false;
-    const was = this.open;
-    if (was) this.disable();
-    this.relay = u.origin;
-    this.relayChosen = true;
-    if (was) this.enable();
-    this._changed();
-    return true;
   }
 
   get canDrive() { return this.letDrive && !!this.rig.driving; }
@@ -258,19 +300,17 @@ export class GuestHost extends EventTarget {
 
   _parkGuest() {
     clearTimeout(this._deadman);
-    if (this._wheel && this.rig.driving && !this.rig.ownerHeld) this.rig.bolt.drive(0, this._heading || 0);
-    this._wheel = null;
+    if (this._guestDriving && this.rig.driving && !this.rig.ownerHeld) this.rig.bolt.drive(0, this._heading || 0);
+    this._guestDriving = false;
   }
 
   _drive(g, x, m) {
     const deny = (why) => this._to(g, { t: 'deny', why });
     if (!x.perms.drive) return deny('locked');
     if (!this.canDrive) return deny('parked');
-    if (!this.isOp(g)) return deny('turn');
-    const now = Date.now();
-    if (this._wheel && this._wheel.g !== g && now < this._wheel.at + WHEEL_MS) return deny('wheel');
+    if (!this.isOp(g)) return deny('turn');      // only the operator drives
     if (this.rig.ownerHeld) return;              // the owner has the stick
-    this._wheel = { g, at: now };
+    this._guestDriving = true;
     const s = Math.max(0, Math.min(1, Number(m.s) || 0));
     this._heading = ((Math.round(Number(m.h) || 0) % 360) + 360) % 360;
     let max = 40;
@@ -278,6 +318,33 @@ export class GuestHost extends EventTarget {
     this.rig.bolt.drive(255 * max / 100 * s, this._heading);
     clearTimeout(this._deadman);
     if (s > 0) this._deadman = setTimeout(() => this._parkGuest(), DEADMAN_MS);
+  }
+
+  // ---------- motors (SET -> MOTORS on, GUESTS not NO, the plugin connected) ----------
+  /** The channels guests may move, for the news; null when they can't. */
+  get motorNews() {
+    const m = this.rig.state.motors;
+    if (!m.on || !m.cap || !this.rig.motor.connected) return null;
+    return this.rig.motor.channels.map(({ i, type, name }) => ({ i, type, name }));
+  }
+
+  _parkMotors() {
+    if (this._guestMotoring) this.rig.motors.follow(true);
+    this._guestMotoring = false;
+  }
+
+  /** A guest's hand control: { c: channel, v: -1..1 }, scaled by GUESTS' cap. The plugin's
+   *  own dead-man stops a motor 1.5 s after the last one (the guest page repeats while held). */
+  _motor(g, x, m) {
+    const deny = (why) => this._to(g, { t: 'deny', why });
+    if (!x.perms.motors) return deny('locked');
+    if (!this.motorNews) return deny('motorsOff');
+    if (!this.isOp(g)) return deny('turn');
+    const ch = this.rig.motor.channels.find((c) => c.i === Number(m.c));
+    if (!ch) return;
+    const v = Math.max(-1, Math.min(1, Number(m.v) || 0)) * this.rig.state.motors.cap / 100;
+    this._guestMotoring = true;
+    this.rig.motor.set(ch.i, valueOf(ch, v), ch.type === 'servo' ? 250 : 0);
   }
 
   // ---------- turns ----------
@@ -302,7 +369,7 @@ export class GuestHost extends EventTarget {
       return this._tellLine();
     }
     if (curX) curX.rounds++;
-    if (cur) this._parkGuest();                  // a new driver: the BOLT stops first
+    if (cur) { this._parkGuest(); this._parkMotors(); }   // a new operator: the BOLT stops, motors go back to the pattern
     this.turn = next ? { g: next[0], until: now + this.turnSec * 1000 } : null;
     this._lineSig = '';
     this._tellLine();
@@ -360,7 +427,7 @@ export class GuestHost extends EventTarget {
 
   _sendNews() {
     if (!this.open) return;
-    const s = this.rig.state, news = { t: 'news', fw: s.sandbox, hacked: s.hacked, drive: this.canDrive };
+    const s = this.rig.state, news = { t: 'news', fw: s.sandbox, hacked: s.hacked, drive: this.canDrive, shown: s.shown, motors: this.motorNews };
     const sig = JSON.stringify(news);
     if (sig === this._news) return;
     this._news = sig;
@@ -383,6 +450,7 @@ export class GuestHost extends EventTarget {
     if (m.t === 'game') return this._game(m.g, x, m);
     if (m.t === 'gev') return this._live(m.g, x, m);
     if (m.t === 'drv') return this._drive(m.g, x, m);
+    if (m.t === 'mot') return this._motor(m.g, x, m);
     if (m.t === 'skip') {                        // GET TO THE GOODZ: ask once, no game
       if (x.full || this.queue.some((q) => q.g === m.g && q.kind === 'skip')) return;
       if (this.gate === 'open') return this.grant(m.g);
@@ -398,7 +466,8 @@ export class GuestHost extends EventTarget {
     switch (m.t) {
       case 'mode': {
         const set = SETS[m.set], i = m.i | 0;
-        if (!set || i < 0 || i >= set.modes.length) return;
+        if (!set || i < 0 || i >= set.modes.length || set.modes[i].cycle) return;   // CYCLE is the owner's
+        if (!isShown(this.rig.state, m.set, i)) return;                               // switched off
         if (!this.rig.setMode(m.set, i)) deny(this.rig.locked ? 'hacked' : 'firewall');
         break;
       }
@@ -453,6 +522,8 @@ export class GuestHost extends EventTarget {
     }
     this._misses = 0;
     this.invites = this.invites.filter((i) => i !== v);   // one phone per password
+    const rec = this.recent.find((x) => x.code === code);
+    if (rec) rec.by = handle(m.name) || 'GUEST';
     const guest = {
       name: handle(m.name) || 'GUEST',
       lang: LANG_CODES.includes(m.lang) ? m.lang : 'en',
@@ -502,11 +573,12 @@ export class GuestHost extends EventTarget {
 
   /** A DEBUG result (on trust: it's a party). */
   _game(g, x, m) {
-    const now = Date.now(), ms = m.ms | 0, saved = Math.max(0, Math.min(6, m.saved | 0));
+    const now = Date.now(), ms = m.ms | 0;
     if (now < x.lastGame + GAME_GAP || ms < 3000 || ms > 30 * 60000) return;
     x.lastGame = now;
     const tag = clean(x.name, 12) || 'RUNNER';
     if (this.live?.g === g) this.live = null;
+    const record = m.won && ms < (this.board[0]?.ms ?? Infinity);   // before this win counts
     const r = this._runner(g, x);
     if (m.won) { r.wins++; r.best = Math.min(r.best ?? Infinity, ms); } else r.losses++;
     this._saveRunners();
@@ -517,8 +589,6 @@ export class GuestHost extends EventTarget {
       this._to(g, { t: 'full', perms: x.perms });
       this._lineSig = '';
       this._rotate();
-      const record = !this.board.length || ms < this.board[0].ms;
-      this.board = [...this.board, { name: x.name, ms, saved }].sort((a, b) => a.ms - b.ms).slice(0, BOARD_SIZE);
       if (this.rig.locked) this.rig.purge();     // debugging the rig fixes the rig
       this.rig.sayText(`${record ? 'NEW RECORD' : 'BUG FIXED'} ${tag} ${mmss(ms)}`);
     } else if (!this.rig.state.sandbox && !this.rig.locked && now > this._breachAt + BREACH_GAP && Math.random() < 0.5) {

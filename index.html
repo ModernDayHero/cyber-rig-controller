@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-visual" />
     <meta name="theme-color" content="#000000" />
     <title>Cyber Deck</title>
     <link rel="icon" type="image/svg+xml" href="octlet.svg" />
@@ -33,6 +33,7 @@
       <section class="guestbar" id="guestbar" hidden aria-label="Guests">
         <div class="row">
           <span class="label" id="guestCount">NO GUESTS</span>
+          <button class="relaystate" id="relayState" title="Guest link: tap to reconnect"></button>
           <button class="ghost go" id="inviteBtn">INVITE</button>
         </div>
         <div class="glist" id="guestList"></div>
@@ -41,7 +42,7 @@
       <dialog class="invite" id="invite">
         <p class="invite-head">WANNA EDGERUN?</p>
         <div class="qr" id="inviteQr"></div>
-        <span class="label">PASSWORD</span>
+        <span class="label">ACCESS CODE</span>
         <p class="invite-code" id="inviteCode">---</p>
         <span class="hint" id="inviteLeft"></span>
         <button class="ghost send invite-badge" id="invitePush">PUSH TO BADGE<span class="bar" id="invitePushBar"></span></button>
@@ -68,16 +69,16 @@
         <button data-view="hat">HAT</button>
         <button data-view="badge">BADGE</button>
         <button data-view="image">IMAGE</button>
+        <button data-view="motor" hidden>MOTOR</button>
         <button data-view="set" aria-label="Settings">SET</button>
       </nav>
 
       <!-- ================= RIG ================= -->
       <div class="view" id="view-rig">
         <nav class="tabs" id="tabs" aria-label="Mode set"></nav>
+        <button class="ghost tunelink" id="tuneLink">TUNE THIS PATTERN ⚙</button>
 
         <section class="modes" id="modes" aria-label="Modes"></section>
-
-        <button class="ghost tunelink" id="tuneLink">TUNE THIS PATTERN ⚙</button>
 
 
         <section class="breathe" id="breathe" hidden aria-label="Rebreather colors">
@@ -121,28 +122,46 @@
         <div class="row">
           <span class="label">SHOW</span>
           <div class="seg seg4" id="badgeKind">
-            <button data-kind="login">LOGIN QR</button>
-            <button data-kind="card">CARD</button>
-            <button data-kind="scores">SCORES</button>
-            <button data-kind="photo">PORTRAIT</button>
+            <button data-kind="splash">SPLASH<small>KEY 1</small></button>
+            <button data-kind="scores">SCORES<small>KEY 2</small></button>
+            <button data-kind="photo">PORTRAIT<small>KEY 3</small></button>
+            <button data-kind="invites">INVITES<small>BOOT</small></button>
           </div>
         </div>
 
         <canvas class="pix badge-pix" id="badgePreview" width="540" height="960" aria-label="Badge preview"></canvas>
 
-        <section class="panel" data-pane="login card">
+        <section class="panel" data-pane="splash">
           <div class="row">
-            <span class="label">CALLSIGN</span>
-            <input class="text" id="badgeCall" maxlength="16" />
+            <span class="label">LOOK</span>
+            <div class="seg" id="splashLook">
+              <button data-look="intro">INTRO</button>
+              <button data-look="art">ARTWORK</button>
+            </div>
           </div>
-          <span class="hint">The guest QR opens the guest page (GUESTS). It stays valid until SET → GUESTS → NEW LINK. The card's other QR is your link: SET → BADGE → LINK QR.</span>
+          <label class="file" id="splashArtPick">
+            <input type="file" id="splashFile" accept="image/png,image/jpeg,image/webp,image/gif" />
+            <span>PICK ARTWORK</span>
+          </label>
+          <div class="row">
+            <span class="label">QR STRIP</span>
+            <div class="seg" id="splashQr">
+              <button data-qr="1">ON</button>
+              <button data-qr="0">OFF</button>
+            </div>
+          </div>
+          <span class="hint">SPLASH is what the badge shows between guests: an intro to the rig, or your own artwork. The QR strip adds the join QR (and your LINK QR, SET → BADGE). On the badge, the keys open the same screens as this menu: KEY 1 SPLASH, KEY 2 SCORES, KEY 3 PORTRAIT (again for the next), BOOT the last invite.</span>
         </section>
 
-        <section class="panel" data-pane="photo" hidden>
+        <section class="panel" data-pane="photo">
           <label class="file">
             <input type="file" id="badgeFile" accept="image/png,image/jpeg,image/webp,image/gif" />
             <span>PICK A PHOTO</span>
           </label>
+        </section>
+
+        <!-- Picture adjustments: the portrait, or the splash artwork -->
+        <section class="panel" id="badgeAdjust">
           <span class="hint">Drag the preview to frame it.</span>
           <div class="row">
             <span class="label">ZOOM</span>
@@ -168,20 +187,17 @@
           </div>
         </section>
 
-        <div class="row">
-          <span class="label">HANGS</span>
-          <div class="seg" id="badgeTurn">
-            <button data-turn="cw">USB DOWN</button>
-            <button data-turn="ccw">USB UP</button>
-          </div>
-        </div>
+        <section class="panel" data-pane="invites">
+          <div class="glist" id="badgeInvites"></div>
+          <span class="hint">The last five access codes. SHOW puts a waiting one back on the badge (and in the pop-up) if it didn't come up right.</span>
+        </section>
+
         <span class="hint" id="badgeInfo">Not linked: tap the Badge chip at the top.</span>
         <div class="seg badge-actions">
           <button class="send" id="badgeSend">SEND TO BADGE<span class="bar" id="badgeBar"></span></button>
         </div>
-        <div class="seg seg4 badge-actions">
-          <button id="badgeShowLogin">LOGIN</button>
-          <button id="badgeShowCard">CARD</button>
+        <div class="seg seg3 badge-actions">
+          <button id="badgeShowSplash">SPLASH</button>
           <button id="badgeShowScores">SCORES</button>
           <button id="badgeClear">CLEAR</button>
         </div>
@@ -189,10 +205,43 @@
 
       <!-- ================= SETTINGS ================= -->
       <div class="view" id="view-set" hidden>
+        <details class="fold" data-fold="animations" open>
+          <summary>ANIMATIONS</summary>
+          <div class="fold-body">
+            <span class="hint">Which animations are in each set: the RIG tab, guests and the watch's A/B only offer the ones switched on (at least 4 a set). CYCLE can still use any.</span>
+            <div class="row"><span class="label">OS</span><span class="hint" id="animCountOs"></span></div>
+            <div class="animgrid" id="animOs"></div>
+            <div class="row"><span class="label">ALT</span><span class="hint" id="animCountAlt"></span></div>
+            <div class="animgrid" id="animAlt"></div>
+          </div>
+        </details>
+
         <p class="fold-head">PATTERNS</p>
         <div class="folds" id="patternFolds"></div>
 
         <p class="fold-head">RIG</p>
+        <details class="fold" data-fold="cycle">
+          <summary>CYCLE</summary>
+          <div class="fold-body">
+            <div class="row">
+              <span class="label">SEQUENCE</span>
+              <select class="select" id="cycPreset"></select>
+            </div>
+            <div class="cycsteps" id="cycSteps"></div>
+            <span class="hint" id="cycTotal"></span>
+            <div class="seg">
+              <button id="cycAdd">+ STEP</button>
+              <button id="cycSave">SAVE AS…</button>
+              <button id="cycDelete">DELETE</button>
+            </div>
+            <div class="seg">
+              <button id="cycStart">SEND + START</button>
+              <button id="cycStop">STOP</button>
+            </div>
+            <span class="hint" id="cycStatus"></span>
+            <span class="hint">The CLUE runs the sequence, so the rig keeps cycling with the phone away, and it keeps the last one sent. CYCLE (last in ALT, on the watch or here) starts it again; any pick by hand stops it. Sign off can't be a step.</span>
+          </div>
+        </details>
         <details class="fold" data-fold="virus">
           <summary>VIRUS</summary>
           <div class="fold-body" id="virusBody">
@@ -236,20 +285,24 @@
               <button id="runnersClear">CLEAR LOG</button>
             </div>
             <span class="hint">Patterns, HACK IT ALL and driving go to one OPERATOR at a time for this long; the rest wait in line (DEBUG winners first, fastest on top) and can play meanwhile. NEXT ends a turn early.</span>
-            <div class="seg">
-              <button id="inviteBtn2">NEW INVITE</button>
-              <button id="guestNewLink">NEW LINK</button>
-            </div>
-            <div class="row">
-              <span class="label">RELAY</span>
-              <input class="text" id="guestRelay" type="url" inputmode="url" spellcheck="false" placeholder="https://ntfy.sh" />
-            </div>
-            <span class="hint">GUESTS (top of the screen) opens the port; each guest gets this long from typing their password. The link stays the same (the badge's QR too) until NEW LINK, which also kicks everyone. RELAY: any ntfy server, e.g. your own on the NAS.</span>
+            <button class="ghost send" id="guestNewLink">NEW LINK</button>
+            <span class="hint">GUESTS (top of the screen) opens the port; INVITE (in the guest bar) makes an access code. Each guest gets TIME from typing it. The guest link stays the same (the badge's QR too) until NEW LINK, which also kicks everyone.</span>
           </div>
         </details>
         <details class="fold" data-fold="badge">
           <summary>BADGE</summary>
           <div class="fold-body">
+            <div class="row">
+              <span class="label">CALLSIGN</span>
+              <input class="text" id="badgeCall" maxlength="16" />
+            </div>
+            <div class="row">
+              <span class="label">HANGS</span>
+              <div class="seg" id="badgeTurn">
+                <button data-turn="cw">USB DOWN</button>
+                <button data-turn="ccw">USB UP</button>
+              </div>
+            </div>
             <div class="row">
               <span class="label">MODE</span>
               <div class="seg" id="badgeMode">
@@ -262,7 +315,7 @@
               <input type="range" id="badgeHold" min="30" max="600" step="30" />
               <output id="badgeHoldOut">3 min</output>
             </div>
-            <span class="hint">WORN: a guest portrait stays this long, then the login QR comes back. TABLE: a photo frame, the login QR and the last four portraits take turns, this long each. On the badge, KEY 1 flips login ↔ card, KEY 2 steps through portraits.</span>
+            <span class="hint">WORN: a guest portrait stays this long, then the login QR comes back. TABLE: a photo frame, the login QR and the last four portraits take turns, this long each. On the badge, KEY 1 SPLASH, KEY 2 SCORES, KEY 3 PORTRAIT (again for the next), BOOT the last invite.</span>
             <div class="row">
               <span class="label">LINK QR</span>
               <input class="text" id="badgeLink" type="url" inputmode="url" spellcheck="false" placeholder="your site or instagram.com/you" />
@@ -310,6 +363,148 @@
             </div>
           </div>
         </details>
+        <details class="fold" data-fold="motors">
+          <summary>MOTORS</summary>
+          <div class="fold-body">
+            <div class="row">
+              <span class="label">PLUGIN</span>
+              <div class="seg" id="motorsOn">
+                <button data-on="1">ON</button>
+                <button data-on="0">OFF</button>
+              </div>
+            </div>
+            <div class="row">
+              <span class="label">FIRMWARE</span>
+              <span class="hint" id="fwState">connect the plugin to check</span>
+            </div>
+            <button class="ghost send" id="fwUpdate" hidden>UPDATE OVER BLUETOOTH<span class="bar" id="fwBar"></span></button>
+            <span class="hint" id="fwHint" hidden>Sends this deck's motor firmware to the Pico over Bluetooth (about a minute; keep the phone close). The board checks it arrived whole and works before swapping it in, keeps the old one as main.bak, and restarts.</span>
+            <span class="hint">The motor plugin (firmware/MOTOR) runs the rig's DC motors and steppers (servos will be their own node). OFF hides the MOTOR tab and chip and lets the plugin go.</span>
+            <div id="motorsBody">
+              <div class="row settest" id="setTestBar" hidden>
+                <span class="hint" id="setTestNow"></span>
+                <button class="ghost" id="setTestStop">STOP</button>
+              </div>
+              <div class="row">
+                <span class="label">GUESTS</span>
+                <div class="seg seg4" id="motorCap">
+                  <button data-cap="0">NO</button>
+                  <button data-cap="25">25%</button>
+                  <button data-cap="50">50%</button>
+                  <button data-cap="100">100%</button>
+                </div>
+              </div>
+              <span class="hint">Guests with MOTORS in their PERMS get hand controls on their OPERATOR turn, at this share of each channel's swing and speed.</span>
+              <div class="row">
+                <span class="label">TEST</span>
+                <div class="seg" id="motorTestOn">
+                  <button data-on="1">ON</button>
+                  <button data-on="0">OFF</button>
+                </div>
+              </div>
+              <span class="hint">TEST makes this section a live control: tapping a motion, changing a pattern's link or a MATCH setting plays it on the motors right away (STOP at the top). It also adds the test bench to the MOTOR tab.</span>
+              <div class="row userow">
+                <span class="label">MOTORS</span>
+                <div class="seg" id="motorUse"></div>
+              </div>
+              <span class="hint" id="motorUseHint">Which motors the lights' motions drive; the others stay still.</span>
+              <button class="ghost send" id="motorMatchAll">MATCH ALL TO THE LIGHTS</button>
+              <span class="hint">Links every pattern to MATCH LIGHTS: the left motor (A) moves with the left intake, the right one (B) with the right, in each pattern's own rhythm; mirrored patterns turn B the other way.</span>
+              <div class="row mhead">
+                <span class="label">MATCH</span>
+                <select class="text" id="matchKey"></select>
+                <button class="ghost" id="matchReset">RESET</button>
+              </div>
+              <div class="row">
+                <span class="label">RIGHT</span>
+                <div class="seg seg3" id="matchRight">
+                  <button data-right="same">SAME</button>
+                  <button data-right="mirror">MIRROR</button>
+                  <button data-right="off">OFF</button>
+                </div>
+              </div>
+              <div class="row">
+                <span class="label">LEVEL</span>
+                <input type="range" id="matchLevel" min="10" max="100" step="5" />
+                <output id="matchLevelOut">100%</output>
+              </div>
+              <div class="row">
+                <span class="label">SPEED</span>
+                <input type="range" id="matchSpeed" min="25" max="200" step="5" />
+                <output id="matchSpeedOut">100%</output>
+              </div>
+              <div class="row">
+                <span class="label">SYNC</span>
+                <input type="range" id="matchShift" min="-2000" max="2000" step="50" />
+                <output id="matchShiftOut">0 ms</output>
+              </div>
+              <span class="hint" id="matchNote"></span>
+              <div class="row mhead">
+                <span class="label">SOUND</span>
+                <div class="vumeter"><span id="soundBar"></span></div>
+              </div>
+              <div class="row">
+                <span class="label">SENS</span>
+                <input type="range" id="soundGain" min="25" max="300" step="5" />
+                <output id="soundGainOut">100%</output>
+              </div>
+              <div class="row">
+                <span class="label">LEVEL</span>
+                <input type="range" id="soundSize" min="10" max="100" step="5" />
+                <output id="soundSizeOut">100%</output>
+              </div>
+              <div class="row">
+                <span class="label">RIGHT</span>
+                <div class="seg" id="soundRight">
+                  <button data-right="same">SAME</button>
+                  <button data-right="mirror">MIRROR</button>
+                </div>
+              </div>
+              <span class="hint">SOUND (VU's motion, or link any pattern to it) runs the motors from the phone's microphone: louder = faster. It levels itself to the room, so it follows the beat, not the volume of the party. SENS: how touchy. The phone asks for the microphone the first time; the mic is only on while SOUND is playing.</span>
+              <div class="row mhead">
+                <span class="label">SHAKE</span>
+                <div class="seg seg3" id="motorShake">
+                  <button data-shake="off">OFF</button>
+                  <button data-shake="buzz">BUZZ</button>
+                  <button data-shake="spin">SPIN</button>
+                </div>
+              </div>
+              <span class="hint">Shake the CLUE: the motors give a burst (harder shake, harder burst), then carry on. Needs the CLUE's new firmware. With TEST on, these buttons play it.</span>
+              <span class="hint">MATCH LIGHTS for one pattern (it follows what the rig shows until you pick one). RIGHT: motor B the same way as A, mirrored, or still. LEVEL / SPEED scale it; SYNC moves it earlier (−) or later (+) to line it up with the mask by eye. Changes play at once.</span>
+              <div class="row mhead"><span class="label">MOTIONS</span><span class="hint" id="motionCount"></span></div>
+              <span class="hint">Tap a motion to tune it, tap again to switch it on / off. Only motions switched on are offered below.</span>
+              <div class="animgrid" id="motionGrid"></div>
+              <div class="row">
+                <span class="label">TUNE</span>
+                <span class="hint" id="motionTuning"></span>
+                <button class="ghost" id="motionReset">RESET</button>
+              </div>
+              <div class="row">
+                <span class="label">SPEED</span>
+                <input type="range" id="motionSpeed" min="25" max="200" step="5" />
+                <output id="motionSpeedOut">100%</output>
+              </div>
+              <div class="row">
+                <span class="label">SIZE</span>
+                <input type="range" id="motionSize" min="10" max="100" step="5" />
+                <output id="motionSizeOut">100%</output>
+              </div>
+              <span class="hint">SPEED: faster or slower than the motion's own timing. SIZE: how much of each servo's swing / motor's top speed it uses.</span>
+              <span class="label mhead">MOTION PER PATTERN</span>
+              <div class="mlinks" id="motorLinks"></div>
+              <span class="hint">The plugin stores one motion per pattern and plays it by itself when the rig changes pattern. NONE parks everything at home.</span>
+            </div>
+          </div>
+        </details>
+        <details class="fold" data-fold="plugins">
+          <summary>PLUGINS</summary>
+          <div class="fold-body">
+            <div class="plugins" id="pluginList"></div>
+            <span class="hint" id="pluginNone">No plugins here. Built-in ones live in src/plugins/builtin/; see src/plugins/README.md.</span>
+            <span class="hint">Each plugin adds its own section below when it's on. OFF removes it and stops what it drives.</span>
+          </div>
+        </details>
+        <div id="pluginPanels"></div>
         <details class="fold" data-fold="hat">
           <summary>HAT</summary>
           <div class="fold-body">
@@ -536,6 +731,104 @@
 
       </div>
 
+      <!-- ================= MOTOR ================= -->
+      <div class="view" id="view-motor" hidden>
+        <div class="mtop">
+          <button class="purge mstop" id="motorStop">STOP</button>
+          <button class="ghost send" id="motorResume">RESUME</button>
+        </div>
+        <button class="ghost send" id="motorSelfTest">CONNECTION TEST</button>
+        <ul class="mchecks" id="motorChecks" hidden aria-live="polite"></ul>
+        <section class="mnow" aria-live="polite">
+          <span class="label" id="nowLabel">MOTORS</span>
+          <b id="nowName">—</b>
+          <span class="hint" id="nowSub"></span>
+        </section>
+        <section class="panel mtest" id="motorTestPanel" hidden aria-label="Motor test bench">
+          <div class="row userow">
+            <span class="label">MOTORS</span>
+            <div class="seg" id="benchUse"></div>
+          </div>
+          <div class="seg seg5" id="benchTabs">
+            <button data-bench="rumble">RUMBLE</button>
+            <button data-bench="swivel">SWIVEL</button>
+            <button data-bench="pad">PAD</button>
+            <button data-bench="cal">CALIBRATE</button>
+            <button data-bench="console">CONSOLE</button>
+          </div>
+
+          <div class="bench" id="bench-rumble">
+            <div class="animgrid" id="testMotions"></div>
+            <div class="row">
+              <span class="label">INTENSITY</span>
+              <input type="range" id="testSize" min="10" max="100" step="5" />
+              <output id="testSizeOut">100%</output>
+            </div>
+            <div class="row">
+              <span class="label">SPEED</span>
+              <input type="range" id="testSpeed" min="25" max="200" step="5" />
+              <output id="testSpeedOut">100%</output>
+            </div>
+            <span class="hint">Tap a motion to play it, again to stop. INTENSITY and SPEED tune it live: the same tuning the lights use (SET → MOTORS).</span>
+          </div>
+
+          <div class="bench" id="bench-swivel" hidden>
+            <span class="label">STEADY SPEED</span>
+            <div class="seg seg3" id="testSpeeds"></div>
+            <button class="ghost" id="swivelDir">DIRECTION: FWD ▶</button>
+            <span class="hint">The chosen MOTORS at a steady speed, with the start-up kick; reversing stops them for a moment first. They stop if the phone locks or the link drops.</span>
+            <span class="label">TIMED</span>
+            <div class="animgrid" id="swivelMotions"></div>
+            <span class="hint">Motions that change speed and direction by themselves (tuned on RUMBLE's sliders when selected).</span>
+          </div>
+
+          <div class="bench" id="bench-pad" hidden>
+            <div class="row">
+              <span class="label" id="padName">No controller found</span>
+              <button class="ghost" id="padSticks">STICKS: OFF</button>
+            </div>
+            <div class="padsticks">
+              <div class="padstick"><div class="padbar"><div class="fill" id="padBarA"></div></div><span class="hint"><span id="padNameA">MOTOR A</span><br><b id="padValA">0%</b></span></div>
+              <div class="padstick"><div class="padbar"><div class="fill" id="padBarB"></div></div><span class="hint"><span id="padNameB">MOTOR B</span><br><b id="padValB">0%</b></span></div>
+            </div>
+            <table class="padmap">
+              <tr><td>A / START</td><td>play / stop the selected motion</td></tr>
+              <tr><td>B / BACK</td><td>STOP everything</td></tr>
+              <tr><td>X</td><td>sticks on / off: left stick motor A, right stick motor B (up = forward)</td></tr>
+              <tr><td>LB RB / ◀ ▶</td><td>previous / next motion</td></tr>
+              <tr><td>▲ ▼</td><td>intensity ±10 %</td></tr>
+            </table>
+            <span class="hint">Pair a Bluetooth controller with the phone (or PC), then press any button. If it disconnects or the page is hidden, the motors stop.</span>
+          </div>
+
+          <div class="bench" id="bench-cal" hidden>
+            <div id="calRows"></div>
+            <span class="hint" id="calNone">Calibration is for the Qwiic Motor Driver / TB6612 motors.</span>
+            <div class="seg">
+              <button id="calStall">RUN STALL FINDER</button>
+              <button id="calSave">SAVE TO BOARD</button>
+            </div>
+            <span class="hint" id="calStatus"></span>
+            <span class="hint">MIN: the lowest drive % where a motor starts reliably; any motion is lifted above it, so gentle levels never just buzz. KICK: full power for this long when a motor starts or reverses. Both change live; SAVE keeps them in the board's channels.json. The stall finder runs every motor raw (no MIN, no kick), 5 % higher every 1.5 s: note where each one starts.</span>
+          </div>
+
+          <div class="bench" id="bench-console" hidden>
+            <pre class="mlog" id="motorLog"></pre>
+            <form class="mcmd" id="motorCmd">
+              <input class="text" id="motorCmdIn" placeholder="Vibrate:10;  or  ?" autocomplete="off" spellcheck="false" />
+              <button class="ghost" type="submit">SEND</button>
+            </form>
+            <button class="ghost" id="motorLogClear">CLEAR</button>
+            <span class="hint">Everything the plugin says shows here while TEST is on. Send the standard commands (Vibrate:10; Rotate:5; Battery; DeviceType;) or ours (? M - X…).</span>
+          </div>
+
+          <button class="ghost send" id="testEnd">END TEST</button>
+        </section>
+        <div class="mchans" id="motorChannels"></div>
+        <span class="hint" id="motorNone">No channels yet: connect the plugin (Motor chip) and check its channels.json.</span>
+        <span class="hint">Hand control takes a channel off the pattern. Motors only run while you hold (they stop 1.5 s after you let go or the link drops); servos stay put. RESUME or a new pattern hands everything back.</span>
+      </div>
+
       <!-- ================= HAT ================= -->
       <div class="view" id="view-hat" hidden>
         <div class="row">
@@ -565,7 +858,6 @@
       <footer class="bottom">
         <button class="ghost" id="standby">STANDBY</button>
         <button class="ghost danger" id="off">SHUT DOWN</button>
-        <button class="connect" id="connect">CONNECT</button>
       </footer>
     </main>
     <script type="module" src="/src/main.js"></script>

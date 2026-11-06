@@ -24,6 +24,7 @@ const DATA_CHAR = '0000ff22-0000-1000-8000-00805f9b34fb'; // bulk payload
 const SEND_DATA_TYPE = 32772;
 const RESP = { SENDING: 2, FINISHED: 4, DISPLAY: 19, BUFFER: 21, CONTINUE: 255, PAUSE: 254 };
 const RESPONSE_TIMEOUT_MS = 600;
+const SETTLE_MS = 300;                 // after connecting, before service discovery (the hat drops it early)
 
 export const EFFECTS = ['none', 'scroll up', 'scroll down', 'scroll left', 'scroll right', 'stack', 'expand', 'laser'];
 
@@ -671,11 +672,13 @@ export class SpotLed extends RigDevice {
     return !!this.device;
   }
 
-  /** Open the link if it isn't, for one upload. */
+  /** Open the link if it isn't, for one upload. The hat drops early discovery now and
+   *  then, so it gets a moment to settle before we ask for its services. */
   async _ensure() {
     if (this.device.gatt.connected && this.cmdChar) return;
     this._setStatus(Status.CONNECTING);
     const server = await this.device.gatt.connect();
+    await new Promise((r) => setTimeout(r, SETTLE_MS));
     await this.setup(server);
     this._setStatus(Status.CONNECTED, this.device.name);
   }
@@ -786,7 +789,7 @@ export class SpotLed extends RigDevice {
   }
 
   /** Serialised. Each attempt (re)connects first, so a dropped link just retries. */
-  send(content, { attempts = 3, onProgress } = {}) {
+  send(content, { attempts = 4, onProgress } = {}) {
     this._queue = this._queue.then(async () => {
       if (!this.device) return;
       clearTimeout(this._idleTimer);
@@ -803,6 +806,10 @@ export class SpotLed extends RigDevice {
           } catch (err) {
             console.warn('[hat] upload failed, retrying', i + 1, err);
             this._shown = null;
+            // Start the next try from a clean link, after a growing pause: 0.5 s, 1 s, 2 s.
+            try { if (this.device.gatt.connected) this.device.gatt.disconnect(); } catch {}
+            this.teardown();
+            if (i < attempts - 1) await new Promise((r) => setTimeout(r, 500 * 2 ** i));
           }
         }
       } finally {

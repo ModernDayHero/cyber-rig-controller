@@ -11,6 +11,7 @@
 //   V 0|1              hacked (the CLUE refuses M/C while 1; K purges)
 //   L 0|1 0|1          mask Bluefruit links, left then right (older firmware: left only)
 //   E <why>            a command was refused (locked, asleep, bad)
+//   S <1-9>            shaken, and how hard (the motors' SHAKE burst)
 
 import { RigDevice } from './device.js';
 import { cmd } from '../config.js';
@@ -114,6 +115,12 @@ export class Clue extends RigDevice {
         break;
       case 'L':
         this._setMask(w[0] === '1', w[1] === '1');
+        break;
+      case 'S':                                  // shaken (strength 1-9): the motors' SHAKE
+        this.dispatchEvent(new CustomEvent('shake', { detail: +w[0] || 1 }));
+        break;
+      case 'G':                                  // CYCLE: on, step, steps
+        if (w.length === 3) report({ cycle: { on: w[0] === '1', i: +w[1], n: +w[2] } });
         break;
       case 'E':
         this.dispatchEvent(new CustomEvent('refused', { detail: w.join(' ') }));

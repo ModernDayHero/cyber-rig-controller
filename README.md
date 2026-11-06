@@ -1,8 +1,8 @@
 # STEAMWorkz Cyber Deck
 
 The phone deck that runs the STEAMWorkz cyber rig. A Web Bluetooth PWA for Chrome on
-Android. The site moves to Cloudflare Pages and this repo goes private
-(docs/hosting-cloudflare.md); until then it's on GitHub Pages.
+Android, served from Cloudflare at deck.steamworkz.net (guests: jack.steamworkz.net);
+see docs/deploy.md.
 
 ```
 Phone ──BLE──▶ CLUE (watch) ──BLE──▶ Rebreather mask, left + right (Circuit Playground Bluefruit ×2)
@@ -17,7 +17,7 @@ content from their tabs. Every device keeps animating on its own if a link drops
 
 **Rig visualizers:** design-time sims and renders of the rig (rig sim, 3D headgear
 configurator, respirator concept, Byte vs BUG.EXE) live in `public/viz/` and are served at
-`https://<user>.github.io/cyber-rig-controller/viz/`.
+`https://deck.steamworkz.net/viz/`.
 
 ## Tabs
 
@@ -27,11 +27,23 @@ configurator, respirator concept, Byte vs BUG.EXE) live in `public/viz/` and are
 | **BOLT** | Follow the rig, or show a look / colour / scrolling text / uploaded image or GIF (8x8, 16 colours). Shake to purge a hack, sensitivity, brightness. |
 | **HAT** | Follow the rig, or upload a PNG / JPEG / GIF (32x16, 256 colours, up to 20 frames) with fit, dithering, transition effect and frame time. Rainfall lightning amount, flip / mirror, brightness. |
 
+## Project layout
+
+`AGENTS.md` maps the modules, pinned versions and the rules for every change; the motor
+module (`src/motors/`) is the restructured template, and `docs/restructure-plan.md` is the
+plan for the rest. The learning side (stage logs, exercises, quizzes) is the separate
+`cyber-rig-lab` repo.
+
+## Learning notes
+
+Background and ideas from building the rig (BLE, security, mesh networks, animations as
+data, the hack game): `docs/learning/ble-security-and-animations.md`.
+
 ## Develop
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173/cyber-rig-controller/
+npm run dev        # http://localhost:5173/
 ```
 
 `localhost` counts as a secure context, so Web Bluetooth works in Chrome on the PC.
@@ -39,13 +51,8 @@ npm run dev        # http://localhost:5173/cyber-rig-controller/
 
 ## Deploy
 
-- **Cloudflare Pages** (the target): builds `main` with `BASE=/` into `dist/`, and
-  `public/_headers` sets the security headers. Setup and moving over:
-  `docs/hosting-cloudflare.md`.
-- **GitHub Pages** (until the repo is private): pushing to `main` runs
-  `.github/workflows/deploy.yml` → `https://<user>.github.io/cyber-rig-controller/`.
-  It skips itself once the repo is private.
-- **Guest relay**: a Cloudflare Worker in `worker/relay`, `docs/relay-worker.md`.
+`npm run deploy` builds and deploys the site (`wrangler.jsonc`) and the guest relay
+(`worker/relay`) to Cloudflare. Test with `npm run dev` first. Details: `docs/deploy.md`.
 
 ## On the phone
 

@@ -53,10 +53,15 @@
 #                                   word on screen, the mask in a mode meanwhile, then
 #                                   back (see "pictures + words" below)
 #                  Q 0|1            mute: 1 silences the CLUE and the mask (sent on connect)
+#                  U st i s ...     CYCLE sequence: (set, index, seconds) per step, up to 16;
+#                                   kept in NVM. G 1|0 starts / stops it (CYCLE in ALT too)
+#                  O os alt         which modes are switched on (bit masks, the phone's
+#                                   SET -> ANIMATIONS); A/B and pad 1 skip the rest. NVM
 #                  X 0|1            firewall: 1 = the virus never starts (no random hijacks,
 #                                   H refused); purges a running one
 #                  H  start the hack     K  purge it     ?  report everything
 #   CLUE -> phone  M <set> <i> / C r g b r g b / R sp w dir / T min max / X 0|1 / P on|waking|blink|off /
+#                  G <on> <step> <steps> (CYCLE) /
 #                  V 0|1 (hacked) / L 0|1 0|1 (left / right Bluefruit links), sent on every change
 #   While hacked the phone's M/C are refused like the buttons; K still purges.
 #
@@ -113,6 +118,7 @@ SETS = {
         (b"P", "SIGN OFF",   WHITE,    "term"),     # rig flares white, then fades out
         (b"e", "NEON",       0xFF1496, "fx"),       # pink / cyan neon sign, buzzing: OPEN
         (b"o", "OVERCLOCK",  0xFF6E00, "vu"),       # amber -> white-hot; the meter follows motion
+        (b"D", "CYCLE",      0x22FF66, "term"),     # runs the stored sequence (phone U / G)
     ],
 }
 SET_NAMES = {"os": "STEAMWorkz OS", "alt": "ALT"}
@@ -145,8 +151,58 @@ def save_tunes():
         blob += bytes((ord(k),)) + v
     nv[0:len(blob)] = blob
 load_tunes()
+
+# CYCLE: a sequence of modes, each for so many seconds, round and round. The phone sends it
+# (U), it's kept in NVM from byte 256: [0xC7, n, then n x (set 0/1, index, secs lo, hi)].
+# Any manual pick (buttons, pad 1, the phone's M / C) stops it; its own steps don't.
+CYC_AT = 256
+cycle_seq = [("os", 0, 180), ("os", 3, 120), ("alt", 1, 120), ("os", 1, 60),
+             ("os", 6, 90), ("alt", 5, 90)]          # AUTO until the phone sends one
+cycling = False
+cyc_i = 0
+cyc_next = 0.0
+cyc_own = False           # True while a step does its own change()
+def load_cycle():
+    nv = microcontroller.nvm
+    if nv is None or nv[CYC_AT] != 0xC7:
+        return
+    seq = []
+    for k in range(min(nv[CYC_AT + 1], 16)):
+        b = nv[CYC_AT + 2 + k * 4: CYC_AT + 6 + k * 4]
+        st = "alt" if b[0] else "os"
+        if b[1] < len(SETS[st]):
+            seq.append((st, b[1], max(5, b[2] | b[3] << 8)))
+    if seq:
+        cycle_seq[:] = seq
+def save_cycle():
+    nv = microcontroller.nvm
+    if nv is None:
+        return
+    blob = bytearray((0xC7, len(cycle_seq)))
+    for st, i, secs in cycle_seq:
+        blob += bytes((1 if st == "alt" else 0, i, secs & 0xFF, secs >> 8))
+    nv[CYC_AT:CYC_AT + len(blob)] = blob
+load_cycle()
+
+# Modes switched on in the phone's SET -> ANIMATIONS: A/B (and landing on a set) skip the
+# others. Bit k = mode k of the set. NVM from byte 400: [0xE5, os lo, hi, alt lo, hi].
+SHOWN_AT = 400
+shown = {"os": 0xFFFF, "alt": 0xFFFF}
+def load_shown():
+    nv = microcontroller.nvm
+    if nv is None or nv[SHOWN_AT] != 0xE5:
+        return
+    shown["os"] = nv[SHOWN_AT + 1] | nv[SHOWN_AT + 2] << 8
+    shown["alt"] = nv[SHOWN_AT + 3] | nv[SHOWN_AT + 4] << 8
+def save_shown():
+    nv = microcontroller.nvm
+    if nv is not None:
+        nv[SHOWN_AT:SHOWN_AT + 5] = bytes((0xE5, shown["os"] & 0xFF, shown["os"] >> 8,
+                                           shown["alt"] & 0xFF, shown["alt"] >> 8))
+load_shown()
 rb_phase = 0.0
 BREATHE_IDX = 2           # REBREATHER's slot in the ALT set
+CYCLE_IDX = 7             # CYCLE's
 
 HOLD_TIME = 5.0           # seconds on pad 0 to switch ACTIVE / STANDBY
 BLINK_TIME = 120.0        # seconds of white blinking before everything goes off
@@ -213,6 +269,7 @@ mic = audiobusio.PDMIn(board.MICROPHONE_CLOCK, board.MICROPHONE_DATA,
 mic_buf = array.array("H", [0] * 160)
 
 SHAKE = 22                # m/s^2 total to count as a shake (resting is ~9.8)
+shake_t = 0.0             # last shake told to the phone (S <1-9 strength>)
 HOLD = 1.0                # seconds a hand must stay over the sensor to cure
 GRACE = 1.0               # seconds after infection before cures count
 TILT_X, TILT_Y = -0.06, 0.06   # tilt push on the swarm; flip a sign if it rolls uphill
@@ -858,6 +915,7 @@ def report():
         ("R", "{} {} {}".format(*rb)),
         ("T", "{} {}".format(*hack_range)),
         ("X", "1" if sandbox else "0"),
+        ("G", "{} {} {}".format(int(cycling), cyc_i, len(cycle_seq))),
     )
     for k, v in st:
         if last_rep.get(k) != v:
@@ -881,10 +939,11 @@ def phone_read():
         except Exception:
             phone_say("E bad")
         report()                           # answer at once, don't wait for the timer
-    if len(phone_buf) > 160:           # junk without newlines: drop it (recipe lines run ~120)
+    if len(phone_buf) > 256:           # junk without newlines: drop it (recipes ~120, CYCLE up to ~180)
         phone_buf = b""
 
 def phone_cmd(w):
+    global cycling
     if not w:
         return
     c = w[0]
@@ -950,6 +1009,23 @@ def phone_cmd(w):
                 apply_theme()                  # CLUE screen picks up the new colour
                 if cur()[3] in ("vu", "fx", "heart"):
                     show_screen()              # these colour their own pictures
+    elif c == "O":                         # modes switched on: os mask, alt mask
+        shown["os"], shown["alt"] = int(w[1]) & 0xFFFF, int(w[2]) & 0xFFFF
+        save_shown()
+    elif c == "U":                         # a CYCLE sequence: set index secs, ...
+        seq = []
+        for k in range(1, len(w) - 2, 3):
+            st, i, secs = w[k], int(w[k + 1]), max(5, min(3600, int(w[k + 2])))
+            if st in SETS and 0 <= i < len(SETS[st]) and not (st == "alt" and i == CYCLE_IDX):
+                seq.append((st, i, secs))
+        if seq:
+            cycle_seq[:] = seq[:16]
+            save_cycle()
+    elif c == "G":                         # CYCLE: 1 starts it, 0 stops it (stays on the step)
+        if w[1] == "1":
+            cycle_start()
+        else:
+            cycling = False
     elif c == "T":
         lo = max(0, min(3600, int(w[1])))
         hi = max(lo, min(3600, int(w[2])))
@@ -1333,13 +1409,21 @@ def mode_line():
 
 def change(new_set=None, d=0):
     """Every mode switch goes through here: A/B steps, pad 1 set swaps."""
-    global cur_set, locked
+    global cur_set, locked, cycling
+    if not cyc_own:
+        cycling = False                  # a pick by hand (or phone) ends CYCLE
     if scanning:
         close_scanner()
     infected = mode != "idle"
     if new_set:
         cur_set = new_set
     idx[cur_set] = (idx[cur_set] + d) % len(SETS[cur_set])
+    if not cyc_own:                      # step past modes switched off (CYCLE may use any)
+        n = len(SETS[cur_set])
+        for _ in range(n):
+            if shown[cur_set] >> idx[cur_set] & 1:
+                break
+            idx[cur_set] = (idx[cur_set] + (-1 if d < 0 else 1)) % n
     locked = None
     go_idle()                   # re-themes, picks the screen, sends the mode
     if infected:
@@ -1347,6 +1431,27 @@ def change(new_set=None, d=0):
     if new_set:
         term_push("> {} loaded".format(SET_NAMES[cur_set]), text_color())
     mode_line()
+    if cur_set == "alt" and idx["alt"] == CYCLE_IDX and not cyc_own:
+        cycle_start()
+
+def cycle_step(i):
+    """Go to step i of the sequence (its own change(), so CYCLE keeps running)."""
+    global cyc_i, cyc_next, cyc_own, cycling
+    cyc_i = i % len(cycle_seq)
+    st, k, secs = cycle_seq[cyc_i]
+    idx[st] = k
+    cyc_own = True
+    try:
+        change(new_set=st if st != cur_set else None)
+    finally:
+        cyc_own = False
+    cycling = True
+    cyc_next = time.monotonic() + secs
+    term_push("> CYCLE {}/{} // {}s".format(cyc_i + 1, len(cycle_seq), secs), GREEN)
+
+def cycle_start():
+    if cycle_seq:
+        cycle_step(0)
 
 def go_standby():
     global power, power_t
@@ -1513,6 +1618,10 @@ while True:
         startle_until = now + 0.8
         term_push("> proximity alert: something is watching", CYAN)
 
+    # CYCLE: the next step when this one's time is up (not mid-virus, -call or -picture)
+    if cycling and now > cyc_next and mode == "idle" and not alert_k and not show_k and not picking:
+        cycle_step(cyc_i + 1)
+
     # random hijack every 3-5 min, unless something's already going on
     if now > next_hack and mode == "idle" and not picking and not sandbox:
         hijack()
@@ -1520,9 +1629,13 @@ while True:
     # motion feeds the swarm; shake / snap-clap / hand held over = cure
     ax, ay, az = accel()
     tilt = (ax, ay)
+    g_now = math.sqrt(ax * ax + ay * ay + az * az)
+    if g_now > SHAKE and now - shake_t > 0.7:     # tell the phone (motors buzz on a shake)
+        shake_t = now
+        phone_say("S {}".format(min(9, int((g_now - SHAKE) / 3) + 1)))
     if mode != "idle" and now - infect_t > GRACE:
         cure = None
-        if math.sqrt(ax * ax + ay * ay + az * az) > SHAKE:
+        if g_now > SHAKE:
             cure = "SHAKE"
         elif waved:
             cure = "HAND WAVE"

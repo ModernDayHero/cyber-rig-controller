@@ -1,9 +1,9 @@
 // LilyGO T5 4.7" e-ink badge (ESP32, firmware/BADGE). The badge never draws anything
 // itself: the BADGE tab makes the finished 16-grey frame and this sends it.
 //
-// Screen slots, kept on the badge: 0 login QR, 1 STEAMWorkz card, 2-5 the last four
-// guest portraits (send to SLOT.GUEST and the badge picks the oldest one to replace),
-// 6 an invite (stays up until we show something else), 7 HIGH SCORES.
+// Screen slots, kept on the badge: 0 SPLASH (the rig's intro or your artwork), 2-5 the
+// last four guest portraits (send to SLOT.GUEST and the badge picks the oldest one to
+// replace), 6 an invite (stays up until we show something else), 7 HIGH SCORES.
 //
 // One custom service, two characteristics:
 //   RX  (we write, with response, <= 500 bytes each)
@@ -29,7 +29,7 @@ const BADGE_RX = '7a1e0002-5d2c-4e8b-9c1f-3b6a8d0e4f21';
 const BADGE_TX = '7a1e0003-5d2c-4e8b-9c1f-3b6a8d0e4f21';
 export const BADGE_NAME_PREFIX = 'RIG-BADGE';
 export const PANEL = { w: 960, h: 540 };       // native; the badge is worn portrait
-export const SLOT = { LOGIN: 0, CARD: 1, INVITE: 6, SCORES: 7, GUEST: 255 };
+export const SLOT = { SPLASH: 0, INVITE: 6, SCORES: 7, GUEST: 255 };
 const CHUNK = 500;                              // long writes: Chrome splits to the MTU
 
 const dec = new TextDecoder();
@@ -117,7 +117,7 @@ export class Badge extends RigDevice {
 
   /** Send a packed 960x540 4-bit frame (Uint8Array, 259 200 bytes) into a slot; it shows
    *  straight away. Progress 0..1 as events. */
-  async sendFrame(frame, slot = SLOT.LOGIN, { quiet = false } = {}) {
+  async sendFrame(frame, slot = SLOT.SPLASH, { quiet = false } = {}) {
     if (!this.rx) throw new Error('Badge not connected');
     if (this.busy) throw new Error('Badge is still busy');
     this.busy = true;
